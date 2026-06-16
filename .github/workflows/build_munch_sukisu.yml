@@ -1,0 +1,51 @@
+name: Build Munch SukiSU Kernel
+run-name: Build munch SukiSU Ultra KPM SUSFS
+on:
+  workflow_dispatch:
+    inputs:
+      phonea:
+        description: Device codename
+        required: true
+        default: munch
+        type: string
+      roota:
+        description: Root mode, use ksu for SukiSU Ultra
+        required: true
+        default: ksu
+        type: string
+
+jobs:
+  build_job:
+    runs-on: ubuntu-22.04
+    env:
+      CCACHE_COMPILERCHECK: "%compiler% -dumpmachine; %compiler% -dumpversion"
+      CCACHE_NOHASHDIR: "true"
+      CCACHE_HARDLINK: "true"
+      CI: "false"
+    steps:
+      - name: Prepare toolchain
+        run: |
+          mkdir "$GITHUB_WORKSPACE/proton-clang"
+          cd "$GITHUB_WORKSPACE/proton-clang"
+          wget https://github.com/kdrag0n/proton-clang/archive/refs/tags/20210522.zip
+          unzip 20210522.zip
+          cd ..
+          sudo apt update
+          sudo apt install -y build-essential git curl wget bison flex zip bc cpio libssl-dev ccache python-is-python3
+
+      - name: Build kernel
+        run: |
+          mkdir "$GITHUB_WORKSPACE/kernel_workspace"
+          cd "$GITHUB_WORKSPACE/kernel_workspace"
+          git clone https://github.com/clcwpwqi/kernel_865_mod -b android15-lineage22-mod --depth=1 android_kernel
+          cd android_kernel
+          bash build-action.sh "${{ inputs.phonea }}" "${{ inputs.roota }}"
+
+      - name: Upload flashable zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.phonea }}-${{ inputs.roota }}-kernel-AnyKernel3
+          path: |
+            kernel_workspace/android_kernel/*.zip
+            kernel_workspace/android_kernel/anykernel/*.zip
+          retention-days: 3
