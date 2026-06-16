@@ -50,6 +50,7 @@ jobs:
               '    find -L drivers/kernelsu -name "*.c" -type f -exec sed -i "s/access_ok(/access_ok(VERIFY_READ, /g" {} +\n'
               "    perl -0pi -e 's@#include <linux/pgtable.h>@#include <asm/pgtable.h>@g; s@#include <linux/uaccess.h>\\n@#include <linux/uaccess.h>\\n#ifndef strncpy_from_user_nofault\\n#define strncpy_from_user_nofault strncpy_from_user\\n#endif\\n@g' drivers/kernelsu/feature/sucompat.c\n"
               "    perl -0pi -e 's@#include \"linux/uaccess.h\"\\n@#include \"linux/uaccess.h\"\\n#ifndef copy_to_kernel_nofault\\n#define copy_to_kernel_nofault probe_kernel_write\\n#endif\\n@g' drivers/kernelsu/hook/arm64/patch_memory.c\n"
+              "    perl -0pi -e 's@#include <linux/mount.h>\\n@#include <linux/mount.h>\\n#ifndef security_inode_init_security_anon\\n#define security_inode_init_security_anon(inode, qname, context_inode) (0)\\n#endif\\n#ifndef selinux_inode\\n#define selinux_inode(inode) ((struct inode_security_struct *)((inode)->i_security))\\n#endif\\n@g; s@#if LINUX_VERSION_CODE >= KERNEL_VERSION\\(6, 1, 0\\)\\nstatic int ksu_wrapper_iopoll.*?#endif\\n\\n@@s; s@// no REMAP_FILE_DEDUP: use file_in.*?static int ksu_wrapper_fadvise@static int ksu_wrapper_fadvise@s; s@^    p->ops\\.iopoll = .*\\n@@m; s@^    p->ops\\.remap_file_range = .*\\n@@m' drivers/kernelsu/infra/file_wrapper.c\n"
               '    tmp_ksu_init=$(mktemp)\n'
               '    printf "#ifndef MODULE_IMPORT_NS\\n#define MODULE_IMPORT_NS(ns)\\n#endif\\n" > "$tmp_ksu_init"\n'
               '    cat drivers/kernelsu/core/init.c >> "$tmp_ksu_init"\n'
@@ -59,7 +60,7 @@ jobs:
           s = s.replace('    -e KSU \\\n', '    -e KPROBES \\\n    -e KRETPROBES \\\n    -e KSU \\\n', 1)
           p.write_text(s)
           PY
-          grep -n -E 'bash -s main|access_ok|pgtable|MODULE_IMPORT_NS|KPROBES|KRETPROBES|KSU' build-action.sh
+          grep -n -E 'bash -s main|access_ok|pgtable|nofault|file_wrapper|MODULE_IMPORT_NS|KPROBES|KRETPROBES|KSU' build-action.sh
           bash build-action.sh "${{ inputs.phonea }}" "${{ inputs.roota }}"
           echo '--- Final KSU config ---'
           grep -E 'CONFIG_KPROBES|CONFIG_KRETPROBES|CONFIG_KSU|CONFIG_KSU_SUSFS|CONFIG_KPM' out/.config || true
