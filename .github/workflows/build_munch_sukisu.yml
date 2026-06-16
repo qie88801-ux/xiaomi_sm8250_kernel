@@ -44,11 +44,16 @@ jobs:
           p = Path('build-action.sh')
           s = p.read_text()
           s = s.replace('bash -s susfs-main', 'bash -s main')
-          s = s.replace('curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s main\n', 'curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s main\n    find -L drivers/kernelsu -name "*.c" -type f -exec sed -i "s/access_ok(/access_ok(VERIFY_READ, /g" {} +\n', 1)
+          inject = '''curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s main
+    find -L drivers/kernelsu -name "*.c" -type f -exec sed -i "s/access_ok(/access_ok(VERIFY_READ, /g" {} +
+    grep -R "MODULE_IMPORT_NS" -n drivers/kernelsu || true
+    sed -i "1i#ifndef MODULE_IMPORT_NS\n#define MODULE_IMPORT_NS(ns)\n#endif" drivers/kernelsu/core/init.c
+'''
+          s = s.replace('curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s main\n', inject, 1)
           s = s.replace('    -e KSU \\\n', '    -e KPROBES \\\n    -e KRETPROBES \\\n    -e KSU \\\n', 1)
           p.write_text(s)
           PY
-          grep -n -E 'bash -s main|access_ok|KPROBES|KRETPROBES|KSU' build-action.sh
+          grep -n -E 'bash -s main|access_ok|MODULE_IMPORT_NS|KPROBES|KRETPROBES|KSU' build-action.sh
           bash build-action.sh "${{ inputs.phonea }}" "${{ inputs.roota }}"
           echo '--- Final KSU config ---'
           grep -E 'CONFIG_KPROBES|CONFIG_KRETPROBES|CONFIG_KSU|CONFIG_KSU_SUSFS|CONFIG_KPM' out/.config || true
