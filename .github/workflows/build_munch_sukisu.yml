@@ -39,7 +39,18 @@ jobs:
           cd "$GITHUB_WORKSPACE/kernel_workspace"
           git clone https://github.com/clcwpwqi/kernel_865_mod -b android15-lineage22-mod --depth=1 android_kernel
           cd android_kernel
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('build-action.sh')
+          s = p.read_text()
+          s = s.replace('bash -s susfs-main', 'bash -s main')
+          s = s.replace('    -e KSU \\\n', '    -e KPROBES \\\n    -e KRETPROBES \\\n    -e KSU \\\n', 1)
+          p.write_text(s)
+          PY
+          grep -n -E 'bash -s main|KPROBES|KRETPROBES|KSU' build-action.sh
           bash build-action.sh "${{ inputs.phonea }}" "${{ inputs.roota }}"
+          echo '--- Final KSU config ---'
+          grep -E 'CONFIG_KPROBES|CONFIG_KRETPROBES|CONFIG_KSU|CONFIG_KSU_SUSFS|CONFIG_KPM' out/.config || true
 
       - name: Upload flashable zip
         uses: actions/upload-artifact@v4
