@@ -48,7 +48,7 @@ jobs:
           extra = (
               '    curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s main\n'
               '    find -L drivers/kernelsu -name "*.c" -type f -exec sed -i "s/access_ok(/access_ok(VERIFY_READ, /g" {} +\n'
-              '    sed -i "s@#include <linux/pgtable.h>@#include <asm/pgtable.h>@g" drivers/kernelsu/feature/sucompat.c\n'
+              "    perl -0pi -e 's@#include <linux/pgtable.h>@#include <asm/pgtable.h>@g; s@#include <linux/uaccess.h>\\n@#include <linux/uaccess.h>\\n#ifndef strncpy_from_user_nofault\\n#define strncpy_from_user_nofault strncpy_from_user\\n#endif\\n@g' drivers/kernelsu/feature/sucompat.c\n"
               '    tmp_ksu_init=$(mktemp)\n'
               '    printf "#ifndef MODULE_IMPORT_NS\\n#define MODULE_IMPORT_NS(ns)\\n#endif\\n" > "$tmp_ksu_init"\n'
               '    cat drivers/kernelsu/core/init.c >> "$tmp_ksu_init"\n'
