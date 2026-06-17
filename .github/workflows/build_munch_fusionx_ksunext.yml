@@ -42,6 +42,10 @@ jobs:
           git clone https://github.com/SenseiiX/fusionX_sm8250 -b stable-next --depth=1 --recurse-submodules --shallow-submodules android_kernel
           cd android_kernel
           git submodule update --init --recursive --depth=1
+          echo "[Remove unsupported LLVM MLGO flags for Proton clang 13]"
+          grep -nE 'regalloc-enable-advisor|enable-ml-inliner' Makefile || true
+          sed -i -E '/regalloc-enable-advisor|enable-ml-inliner/d' Makefile
+          ! grep -nE 'regalloc-enable-advisor|enable-ml-inliner' Makefile
 
           TOOLCHAIN="$GITHUB_WORKSPACE/proton-clang/proton-clang-20210522/bin"
           ARM32_WRAP="$GITHUB_WORKSPACE/arm32-toolchain-wrapper"
