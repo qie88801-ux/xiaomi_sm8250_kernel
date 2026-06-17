@@ -46,6 +46,25 @@ jobs:
           grep -nE 'regalloc-enable-advisor|enable-ml-inliner|fsplit-machine-functions' Makefile || true
           sed -i -E '/regalloc-enable-advisor|enable-ml-inliner|fsplit-machine-functions/d' Makefile
           ! grep -nE 'regalloc-enable-advisor|enable-ml-inliner|fsplit-machine-functions' Makefile
+          echo "[Patch KernelSU-Next old execve ksud API wrapper]"
+          cat >> drivers/kernelsu/ksud.c <<'EOF'
+
+#if defined(CONFIG_KSU) && !defined(CONFIG_KPROBES)
+int ksu_handle_execve_ksud(const char __user *filename_user,
+			   const char __user *const __user *__argv)
+{
+	struct user_arg_ptr argv = { .ptr.native = __argv };
+	struct filename filename_in, *filename_p;
+	char path[32] = {0};
+
+	ksu_strncpy_from_user_nofault(path, filename_user, sizeof(path));
+	filename_in.name = path;
+	filename_p = &filename_in;
+	return ksu_handle_execveat_ksud((int *)AT_FDCWD, &filename_p, &argv, NULL, NULL);
+}
+#endif
+EOF
+          grep -n 'ksu_handle_execve_ksud' drivers/kernelsu/ksud.c
 
           TOOLCHAIN="$GITHUB_WORKSPACE/proton-clang/proton-clang-20210522/bin"
           ARM32_WRAP="$GITHUB_WORKSPACE/arm32-toolchain-wrapper"
