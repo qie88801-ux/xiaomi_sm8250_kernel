@@ -47,6 +47,7 @@ jobs:
           setup = '    curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s main\n'
           extra = (
               '    curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s main\n'
+              '    perl -0pi -e "s@#ifdef CONFIG_KSU@#if 0 /* disabled legacy KernelSU hook */@g" fs/read_write.c fs/exec.c drivers/input/input.c drivers/tty/pty.c\n'
               '    find -L drivers/kernelsu -name "*.c" -type f -exec sed -i "s/access_ok(/access_ok(VERIFY_READ, /g" {} +\n'
               "    perl -0pi -e 's@#include <linux/pgtable.h>@#include <asm/pgtable.h>@g; s@#include <linux/uaccess.h>\\n@#include <linux/uaccess.h>\\n#ifndef strncpy_from_user_nofault\\n#define strncpy_from_user_nofault strncpy_from_user\\n#endif\\n@g' drivers/kernelsu/feature/sucompat.c\n"
               "    perl -0pi -e 's@#include \"linux/uaccess.h\"\\n@#include \"linux/uaccess.h\"\\n#ifndef copy_to_kernel_nofault\\n#define copy_to_kernel_nofault probe_kernel_write\\n#endif\\n@g' drivers/kernelsu/hook/arm64/patch_memory.c\n"
