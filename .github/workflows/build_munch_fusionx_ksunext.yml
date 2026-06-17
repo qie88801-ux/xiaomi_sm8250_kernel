@@ -1,5 +1,5 @@
-name: Build Munch FusionX Init Marker Kernel
-run-name: Build munch FusionX no-KSU init markers
+name: Build Munch FusionX Async Marker Kernel
+run-name: Build munch FusionX no-KSU async markers
 on:
   workflow_dispatch:
     inputs:
@@ -11,7 +11,7 @@ on:
       roota:
         description: Root mode
         required: true
-        default: fusionx-baseline-noksu-console-markers
+        default: fusionx-baseline-noksu-console-asyncmarkers
         type: string
 
 jobs:
@@ -81,6 +81,29 @@ jobs:
           p.write_text(s)
           PY
           grep -n 'munch_debug' init/main.c
+          echo "[Add async progress markers]"
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("kernel/async.c")
+          s = p.read_text()
+          old = '''\tktime_t uninitialized_var(calltime), delta, rettime;\n\n\t/* 1) run (and print duration) */'''
+          new = '''\tktime_t uninitialized_var(calltime), delta, rettime;\n\n\tif (system_state < SYSTEM_RUNNING)\n\t\tpr_err("munch_async: start cookie=%lli func=%pF pid=%i\\n",\n\t\t       (long long)entry->cookie, entry->func, task_pid_nr(current));\n\n\t/* 1) run (and print duration) */'''
+          if old not in s:
+              raise SystemExit("missing async start pattern")
+          s = s.replace(old, new, 1)
+          old = '''\t/* 2) remove self from the pending queues */\n\tspin_lock_irqsave(&async_lock, flags);'''
+          new = '''\tif (system_state < SYSTEM_RUNNING)\n\t\tpr_err("munch_async: done cookie=%lli func=%pF pid=%i\\n",\n\t\t       (long long)entry->cookie, entry->func, task_pid_nr(current));\n\n\t/* 2) remove self from the pending queues */\n\tspin_lock_irqsave(&async_lock, flags);'''
+          if old not in s:
+              raise SystemExit("missing async done pattern")
+          s = s.replace(old, new, 1)
+          old = '''\twait_event(async_done, lowest_in_progress(domain) >= cookie);'''
+          new = '''\twhile (lowest_in_progress(domain) < cookie) {\n\t\tstruct async_entry *first = NULL;\n\t\tasync_cookie_t first_cookie = ASYNC_COOKIE_MAX;\n\t\tasync_func_t first_func = NULL;\n\t\tunsigned long flags;\n\n\t\tspin_lock_irqsave(&async_lock, flags);\n\t\tif (domain) {\n\t\t\tif (!list_empty(&domain->pending))\n\t\t\t\tfirst = list_first_entry(&domain->pending,\n\t\t\t\t\t\tstruct async_entry, domain_list);\n\t\t} else {\n\t\t\tif (!list_empty(&async_global_pending))\n\t\t\t\tfirst = list_first_entry(&async_global_pending,\n\t\t\t\t\t\tstruct async_entry, global_list);\n\t\t}\n\t\tif (first) {\n\t\t\tfirst_cookie = first->cookie;\n\t\t\tfirst_func = first->func;\n\t\t}\n\t\tspin_unlock_irqrestore(&async_lock, flags);\n\n\t\tif (first_func)\n\t\t\tpr_err("munch_async: waiting target=%lli first=%lli func=%pF pid=%i\\n",\n\t\t\t       (long long)cookie, (long long)first_cookie,\n\t\t\t       first_func, task_pid_nr(current));\n\t\telse\n\t\t\tpr_err("munch_async: waiting target=%lli lowest=%lli no_first pid=%i\\n",\n\t\t\t       (long long)cookie,\n\t\t\t       (long long)lowest_in_progress(domain),\n\t\t\t       task_pid_nr(current));\n\n\t\twait_event_timeout(async_done,\n\t\t\t\t   lowest_in_progress(domain) >= cookie, HZ);\n\t}'''
+          if old not in s:
+              raise SystemExit("missing async wait pattern")
+          s = s.replace(old, new, 1)
+          p.write_text(s)
+          PY
+          grep -n 'munch_async' kernel/async.c
 
           TOOLCHAIN="$GITHUB_WORKSPACE/proton-clang/proton-clang-20210522/bin"
           ARM32_WRAP="$GITHUB_WORKSPACE/arm32-toolchain-wrapper"
