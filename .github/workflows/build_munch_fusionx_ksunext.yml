@@ -1,5 +1,5 @@
-name: Build Munch FusionX Console Baseline Kernel
-run-name: Build munch FusionX no-KSU console baseline
+name: Build Munch FusionX Init Marker Kernel
+run-name: Build munch FusionX no-KSU init markers
 on:
   workflow_dispatch:
     inputs:
@@ -11,7 +11,7 @@ on:
       roota:
         description: Root mode
         required: true
-        default: fusionx-baseline-noksu-console
+        default: fusionx-baseline-noksu-console-markers
         type: string
 
 jobs:
@@ -46,7 +46,41 @@ jobs:
           grep -nE 'regalloc-enable-advisor|enable-ml-inliner|fsplit-machine-functions' Makefile || true
           sed -i -E '/regalloc-enable-advisor|enable-ml-inliner|fsplit-machine-functions/d' Makefile
           ! grep -nE 'regalloc-enable-advisor|enable-ml-inliner|fsplit-machine-functions' Makefile
-          echo "[No-KSU console baseline: do not patch KernelSU hook wrappers]"
+          echo "[No-KSU console marker baseline: do not patch KernelSU hook wrappers]"
+          echo "[Add kernel_init_freeable progress markers]"
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("init/main.c")
+          s = p.read_text()
+          replacements = [
+              (
+                  '\tdo_basic_setup();\n\n\t/* Open',
+                  '\tdo_basic_setup();\n\tpr_err("munch_debug: after do_basic_setup before console\\n");\n\n\t/* Open',
+              ),
+              (
+                  '\t(void) ksys_dup(0);\n\t(void) ksys_dup(0);\n\t/*',
+                  '\t(void) ksys_dup(0);\n\t(void) ksys_dup(0);\n\tpr_err("munch_debug: after console open/dup\\n");\n\t/*',
+              ),
+              (
+                  '\tif (!ramdisk_execute_command)\n\t\tramdisk_execute_command = "/init";\n\n\tif (ksys_access',
+                  '\tpr_err("munch_debug: before ramdisk command setup current=%s\\n", ramdisk_execute_command ? ramdisk_execute_command : "(null)");\n\tif (!ramdisk_execute_command)\n\t\tramdisk_execute_command = "/init";\n\tpr_err("munch_debug: before ksys_access ramdisk=%s\\n", ramdisk_execute_command ? ramdisk_execute_command : "(null)");\n\n\tif (ksys_access',
+              ),
+              (
+                  '\t\tramdisk_execute_command = NULL;\n\t\tprepare_namespace();\n\t}\n\n\t/*\n\t * Ok, we have completed',
+                  '\t\tramdisk_execute_command = NULL;\n\t\tprepare_namespace();\n\t}\n\tpr_err("munch_debug: after ksys_access/prepare_namespace ramdisk=%s\\n", ramdisk_execute_command ? ramdisk_execute_command : "(null)");\n\n\t/*\n\t * Ok, we have completed',
+              ),
+              (
+                  '\tintegrity_load_keys();\n\tload_default_modules();\n}',
+                  '\tpr_err("munch_debug: before integrity_load_keys\\n");\n\tintegrity_load_keys();\n\tpr_err("munch_debug: after integrity_load_keys before load_default_modules\\n");\n\tload_default_modules();\n\tpr_err("munch_debug: after load_default_modules leaving kernel_init_freeable\\n");\n}',
+              ),
+          ]
+          for old, new in replacements:
+              if old not in s:
+                  raise SystemExit(f"missing marker pattern: {old!r}")
+              s = s.replace(old, new, 1)
+          p.write_text(s)
+          PY
+          grep -n 'munch_debug' init/main.c
 
           TOOLCHAIN="$GITHUB_WORKSPACE/proton-clang/proton-clang-20210522/bin"
           ARM32_WRAP="$GITHUB_WORKSPACE/arm32-toolchain-wrapper"
@@ -90,7 +124,7 @@ jobs:
             -d KSU_DEBUG
           make $MAKE_ARGS olddefconfig
 
-          echo '--- Final FusionX no-KSU console baseline config ---'
+          echo '--- Final FusionX no-KSU console marker config ---'
           grep -E 'CONFIG_LOCALVERSION|CONFIG_MODULES|CONFIG_KPROBES|CONFIG_KRETPROBES|CONFIG_KPROBE_EVENTS|CONFIG_KSU|CONFIG_MODVERSIONS|CONFIG_MIHW|CONFIG_BUILD_ARM64|CONFIG_LITTLE_CPU_MASK|CONFIG_BIG_CPU_MASK|CONFIG_PRIME_CPU_MASK|CONFIG_LTO|CONFIG_LTO_CLANG|CONFIG_LTO_NONE|CONFIG_CFI_CLANG|CONFIG_SHADOW_CALL_STACK|CONFIG_SERIAL_MSM_GENI_CONSOLE' out/.config || true
           grep -q '^CONFIG_LITTLE_CPU_MASK=15$' out/.config
           grep -q '^CONFIG_BIG_CPU_MASK=112$' out/.config
