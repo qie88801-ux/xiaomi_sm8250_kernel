@@ -113,13 +113,15 @@ jobs:
           grep -q '^CONFIG_BIG_CPU_MASK=112$' out/.config
           grep -q '^CONFIG_PRIME_CPU_MASK=128$' out/.config
 
-          make $MAKE_ARGS -j"$(nproc)" Image
+          make $MAKE_ARGS -j"$(nproc)" Image.gz-dtb
+          ls -l out/arch/arm64/boot/Image out/arch/arm64/boot/Image.gz out/arch/arm64/boot/Image.gz-dtb || true
 
           mkdir -p "$GITHUB_WORKSPACE/munch-fusionx-ksunext-output"
-          cp out/arch/arm64/boot/Image "$GITHUB_WORKSPACE/munch-fusionx-ksunext-output/Image"
+          cp out/arch/arm64/boot/Image.gz-dtb "$GITHUB_WORKSPACE/munch-fusionx-ksunext-output/Image.gz-dtb"
+          cp out/arch/arm64/boot/Image "$GITHUB_WORKSPACE/munch-fusionx-ksunext-output/Image.raw"
           cp out/.config "$GITHUB_WORKSPACE/munch-fusionx-ksunext-output/kernel.config"
-          sha256sum "$GITHUB_WORKSPACE/munch-fusionx-ksunext-output/Image" | tee "$GITHUB_WORKSPACE/munch-fusionx-ksunext-output/SHA256SUMS"
-          strings "$GITHUB_WORKSPACE/munch-fusionx-ksunext-output/Image" | grep -m1 'Linux version' | tee "$GITHUB_WORKSPACE/munch-fusionx-ksunext-output/kernel-version.txt" || true
+          sha256sum "$GITHUB_WORKSPACE/munch-fusionx-ksunext-output/Image.gz-dtb" "$GITHUB_WORKSPACE/munch-fusionx-ksunext-output/Image.raw" | tee "$GITHUB_WORKSPACE/munch-fusionx-ksunext-output/SHA256SUMS"
+          strings "$GITHUB_WORKSPACE/munch-fusionx-ksunext-output/Image.raw" | grep -m1 'Linux version' | tee "$GITHUB_WORKSPACE/munch-fusionx-ksunext-output/kernel-version.txt" || true
 
       - name: Upload kernel image
         uses: actions/upload-artifact@v4
