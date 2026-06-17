@@ -64,6 +64,20 @@ jobs:
 
           curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -s legacy
 
+          perl -0pi -e 's@(\nint do_execve_file\(struct file \*file, void \*__argv, void \*__envp\))@\n#ifdef CONFIG_KSU\nextern int ksu_handle_execveat(int *fd, struct filename **filename_ptr, void *argv, void *envp, int *flags);\n#endif\n$1@' fs/exec.c
+          perl -0pi -e 's@(\tstruct user_arg_ptr envp = \{ \.ptr\.native = __envp \};\n)(\treturn do_execveat_common\(AT_FDCWD, filename, argv, envp, 0\);)@$1#ifdef CONFIG_KSU\n\t{\n\t\tint ksu_fd = AT_FDCWD;\n\t\tint ksu_flags = 0;\n\t\tksu_handle_execveat(&ksu_fd, &filename, &argv, &envp, &ksu_flags);\n\t}\n#endif\n$2@' fs/exec.c
+          perl -0pi -e 's@(\tstruct user_arg_ptr envp = \{ \.ptr\.native = __envp \};\n\n)(\treturn do_execveat_common\(fd, filename, argv, envp, flags\);)@$1#ifdef CONFIG_KSU\n\tksu_handle_execveat(&fd, &filename, &argv, &envp, &flags);\n#endif\n\n$2@' fs/exec.c
+          perl -0pi -e 's@(\tstruct user_arg_ptr envp = \{\n\t\t\.is_compat = true,\n\t\t\.ptr\.compat = __envp,\n\t\};\n)(\treturn do_execveat_common\(AT_FDCWD, filename, argv, envp, 0\);)@$1#ifdef CONFIG_KSU\n\t{\n\t\tint ksu_fd = AT_FDCWD;\n\t\tint ksu_flags = 0;\n\t\tksu_handle_execveat(&ksu_fd, &filename, &argv, &envp, &ksu_flags);\n\t}\n#endif\n$2@' fs/exec.c
+          perl -0pi -e 's@(\tstruct user_arg_ptr envp = \{\n\t\t\.is_compat = true,\n\t\t\.ptr\.compat = __envp,\n\t\};\n)(\treturn do_execveat_common\(fd, filename, argv, envp, flags\);)@$1#ifdef CONFIG_KSU\n\tksu_handle_execveat(&fd, &filename, &argv, &envp, &flags);\n#endif\n$2@' fs/exec.c
+
+          perl -0pi -e 's@(\nSYSCALL_DEFINE3\(faccessat, int, dfd, const char __user \*, filename, int, mode\)\n\{\n)(\treturn do_faccessat\(dfd, filename, mode\);\n\})@\n#ifdef CONFIG_KSU\nextern int ksu_handle_faccessat(int *dfd, const char __user **filename_user, int *mode, int *flags);\n#endif\n$1#ifdef CONFIG_KSU\n\tksu_handle_faccessat(&dfd, &filename, &mode, NULL);\n#endif\n$2@' fs/open.c
+
+          perl -0pi -e 's@(\nSYSCALL_DEFINE3\(read, unsigned int, fd, char __user \*, buf, size_t, count\)\n\{\n)(\treturn ksys_read\(fd, buf, count\);\n\})@\n#ifdef CONFIG_KSU\nextern void ksu_handle_sys_read(unsigned int fd);\n#endif\n$1#ifdef CONFIG_KSU\n\tksu_handle_sys_read(fd);\n#endif\n$2@' fs/read_write.c
+
+          perl -0pi -e 's@(\n#if !defined\(__ARCH_WANT_STAT64\) \|\| defined\(__ARCH_WANT_SYS_NEWFSTATAT\)\nSYSCALL_DEFINE4\(newfstatat, int, dfd, const char __user \*, filename,\n\t\tstruct stat __user \*, statbuf, int, flag\)\n\{\n)(\tstruct kstat stat;\n\tint error;)@\n#ifdef CONFIG_KSU\nextern int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags);\n#endif\n$1#ifdef CONFIG_KSU\n\tksu_handle_stat(&dfd, &filename, &flag);\n#endif\n$2@' fs/stat.c
+
+          perl -0pi -e 's@(\nSYSCALL_DEFINE4\(reboot, int, magic1, int, magic2, unsigned int, cmd,\n\t\tvoid __user \*, arg\)\n\{\n)(\tstruct pid_namespace \*pid_ns = task_active_pid_ns\(current\);\n\tchar buffer\[256\];\n\tint ret = 0;\n)@\n#ifdef CONFIG_KSU\nextern int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void __user **arg);\n#endif\n$1$2#ifdef CONFIG_KSU\n\tksu_handle_sys_reboot(magic1, magic2, cmd, &arg);\n#endif\n@' kernel/reboot.c
+
           if grep -q "struct selinux_state selinux_state __rticdata;" security/selinux/hooks.c; then
             perl -0pi -e 's/struct selinux_state selinux_state __rticdata;/struct selinux_state selinux_state;/' security/selinux/hooks.c
           fi
@@ -209,14 +223,15 @@ jobs:
             -e KPROBES \
             -e KPROBE_EVENTS \
             -e KSU \
-            -e KSU_KPROBE_HOOKS \
+            -e KSU_MANUAL_HOOK \
+            -d KSU_KPROBES_HOOK \
             -e MODULE_REL_CRCS \
             -e KALLSYMS \
             -e KALLSYMS_ALL
           make $MAKE_ARGS olddefconfig
 
           echo '--- Final KSU Next config ---'
-          grep -E 'CONFIG_KPROBES|CONFIG_KPROBE_EVENTS|CONFIG_KSU|CONFIG_KSU_KPROBE_HOOKS|CONFIG_MODULE_REL_CRCS|CONFIG_MODVERSIONS|CONFIG_KALLSYMS' out/.config || true
+          grep -E 'CONFIG_KPROBES|CONFIG_KPROBE_EVENTS|CONFIG_KSU|CONFIG_KSU_MANUAL_HOOK|CONFIG_KSU_KPROBES_HOOK|CONFIG_MODULE_REL_CRCS|CONFIG_MODVERSIONS|CONFIG_KALLSYMS' out/.config || true
 
           make $MAKE_ARGS -j"$(nproc)" Image
 
