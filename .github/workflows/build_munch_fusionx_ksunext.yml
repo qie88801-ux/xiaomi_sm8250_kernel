@@ -39,8 +39,9 @@ jobs:
           set -euxo pipefail
           mkdir "$GITHUB_WORKSPACE/kernel_workspace"
           cd "$GITHUB_WORKSPACE/kernel_workspace"
-          git clone https://github.com/SenseiiX/fusionX_sm8250 -b stable-next --depth=1 android_kernel
+          git clone https://github.com/SenseiiX/fusionX_sm8250 -b stable-next --depth=1 --recurse-submodules --shallow-submodules android_kernel
           cd android_kernel
+          git submodule update --init --recursive --depth=1
 
           TOOLCHAIN="$GITHUB_WORKSPACE/proton-clang/proton-clang-20210522/bin"
           ARM32_WRAP="$GITHUB_WORKSPACE/arm32-toolchain-wrapper"
@@ -63,6 +64,8 @@ jobs:
           "$TOOLCHAIN/aarch64-linux-gnu-ld" --version | head -n 1
           echo "[KernelSU-Next tree]"
           test -d KernelSU-Next && git -C KernelSU-Next rev-parse --short HEAD || true
+          ls -la KernelSU-Next/kernel drivers/kernelsu
+          test -f drivers/kernelsu/Kconfig
 
           make $MAKE_ARGS stock_defconfig
           scripts/config --file out/.config \
