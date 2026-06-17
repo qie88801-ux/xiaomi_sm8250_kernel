@@ -58,14 +58,18 @@ jobs:
           export PATH="/usr/bin:$TOOLCHAIN:$PATH"
           export ARCH=arm64
           export SUBARCH=arm64
-          MAKE_ARGS="ARCH=arm64 SUBARCH=arm64 O=out CC=$TOOLCHAIN/clang CROSS_COMPILE=$TOOLCHAIN/aarch64-linux-gnu- CROSS_COMPILE_ARM32=$ARM32_WRAP/arm-linux-gnueabi- CROSS_COMPILE_COMPAT=$ARM32_WRAP/arm-linux-gnueabi- CLANG_TRIPLE=aarch64-linux-gnu-"
+          for tool in ld.lld llvm-ar llvm-nm llvm-objcopy llvm-objdump llvm-readelf llvm-strip; do
+            test -x "$TOOLCHAIN/$tool"
+          done
+          MAKE_ARGS="ARCH=arm64 SUBARCH=arm64 O=out CC=$TOOLCHAIN/clang LD=$TOOLCHAIN/ld.lld AR=$TOOLCHAIN/llvm-ar NM=$TOOLCHAIN/llvm-nm OBJCOPY=$TOOLCHAIN/llvm-objcopy OBJDUMP=$TOOLCHAIN/llvm-objdump READELF=$TOOLCHAIN/llvm-readelf STRIP=$TOOLCHAIN/llvm-strip CROSS_COMPILE=$TOOLCHAIN/aarch64-linux-gnu- CROSS_COMPILE_ARM32=$ARM32_WRAP/arm-linux-gnueabi- CROSS_COMPILE_COMPAT=$ARM32_WRAP/arm-linux-gnueabi- CLANG_TRIPLE=aarch64-linux-gnu-"
 
           echo "[kernel version]"
           grep -E '^(VERSION|PATCHLEVEL|SUBLEVEL|EXTRAVERSION) =' Makefile
           echo "[clang version]"
           "$TOOLCHAIN/clang" --version
-          echo "[aarch64 GNU ld version]"
-          "$TOOLCHAIN/aarch64-linux-gnu-ld" --version | head -n 1
+          echo "[LLVM linker/binutils]"
+          "$TOOLCHAIN/ld.lld" --version | head -n 1
+          "$TOOLCHAIN/llvm-ar" --version | head -n 1
           echo "[KernelSU-Next tree]"
           test -d KernelSU-Next && git -C KernelSU-Next rev-parse --short HEAD || true
           ls -la KernelSU-Next/kernel drivers/kernelsu
