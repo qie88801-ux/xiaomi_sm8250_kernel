@@ -1,5 +1,5 @@
-name: Build Munch FusionX Skip Free Initmem Kernel
-run-name: Build munch FusionX no-KSU skip free_initmem
+name: Build Munch FusionX KSU Skip Free Initmem Kernel
+run-name: Build munch FusionX KSU skip free_initmem
 on:
   workflow_dispatch:
     inputs:
@@ -11,7 +11,7 @@ on:
       roota:
         description: Root mode
         required: true
-        default: fusionx-baseline-noksu-console-skipfreeinit
+        default: fusionx-ksunext-skipfreeinit
         type: string
 
 jobs:
@@ -46,7 +46,34 @@ jobs:
           grep -nE 'regalloc-enable-advisor|enable-ml-inliner|fsplit-machine-functions' Makefile || true
           sed -i -E '/regalloc-enable-advisor|enable-ml-inliner|fsplit-machine-functions/d' Makefile
           ! grep -nE 'regalloc-enable-advisor|enable-ml-inliner|fsplit-machine-functions' Makefile
-          echo "[No-KSU console marker baseline: do not patch KernelSU hook wrappers]"
+          echo "[Route KernelSU-Next through CONFIG_KPROBES when kprobes are enabled]"
+          grep -RIn 'KSU_KPROBES_HOOK' fs drivers kernel security || true
+          grep -RIl 'KSU_KPROBES_HOOK' fs drivers kernel security | while read -r hook_file; do
+            sed -i 's/!defined(CONFIG_KSU_KPROBES_HOOK)/!defined(CONFIG_KPROBES)/g' "$hook_file"
+          done
+          ! grep -RIn 'KSU_KPROBES_HOOK' fs drivers kernel security
+          sed -i 's/^#ifdef CONFIG_KSU$/#if defined(CONFIG_KSU) \&\& !defined(CONFIG_KPROBES)/' drivers/input/input.c
+          grep -nE 'CONFIG_KSU|ksu_input_hook|ksu_handle_input_handle_event' drivers/input/input.c
+          echo "[Patch KernelSU-Next old execve ksud API wrapper]"
+          cat >> drivers/kernelsu/ksud.c <<'EOF'
+          
+          #if defined(CONFIG_KSU) && !defined(CONFIG_KPROBES)
+          int ksu_handle_execve_ksud(const char __user *filename_user,
+          			   const char __user *const __user *__argv)
+          {
+          	struct user_arg_ptr argv = { .ptr.native = __argv };
+          	struct filename filename_in, *filename_p;
+          	char path[32] = {0};
+          	int fd = AT_FDCWD;
+          
+          	ksu_strncpy_from_user_nofault(path, filename_user, sizeof(path));
+          	filename_in.name = path;
+          	filename_p = &filename_in;
+          	return ksu_handle_execveat_ksud(&fd, &filename_p, &argv, NULL, NULL);
+          }
+          #endif
+          EOF
+          grep -n 'ksu_handle_execve_ksud' drivers/kernelsu/ksud.c
           echo "[Add kernel_init_freeable progress markers]"
           python3 - <<'PY'
           from pathlib import Path
@@ -206,8 +233,10 @@ jobs:
           echo "[LLVM linker/binutils]"
           "$TOOLCHAIN/ld.lld" --version | head -n 1
           "$TOOLCHAIN/llvm-ar" --version | head -n 1
-          echo "[KernelSU-Next tree present but disabled for baseline]"
+          echo "[KernelSU-Next tree]"
           test -d KernelSU-Next && git -C KernelSU-Next rev-parse --short HEAD || true
+          ls -la KernelSU-Next/kernel drivers/kernelsu
+          test -f drivers/kernelsu/Kconfig
 
           make $MAKE_ARGS vendor/munch_defconfig
           scripts/config --file out/.config \
@@ -221,11 +250,11 @@ jobs:
             --set-val LITTLE_CPU_MASK 15 \
             --set-val BIG_CPU_MASK 112 \
             --set-val PRIME_CPU_MASK 128 \
-            -d KSU \
+            -e KSU \
             -d KSU_DEBUG
           make $MAKE_ARGS olddefconfig
 
-          echo '--- Final FusionX no-KSU console marker config ---'
+          echo '--- Final FusionX KSU skip-freeinit config ---'
           grep -E 'CONFIG_LOCALVERSION|CONFIG_MODULES|CONFIG_KPROBES|CONFIG_KRETPROBES|CONFIG_KPROBE_EVENTS|CONFIG_KSU|CONFIG_MODVERSIONS|CONFIG_MIHW|CONFIG_BUILD_ARM64|CONFIG_LITTLE_CPU_MASK|CONFIG_BIG_CPU_MASK|CONFIG_PRIME_CPU_MASK|CONFIG_LTO|CONFIG_LTO_CLANG|CONFIG_LTO_NONE|CONFIG_CFI_CLANG|CONFIG_SHADOW_CALL_STACK|CONFIG_SERIAL_MSM_GENI_CONSOLE' out/.config || true
           grep -q '^CONFIG_LITTLE_CPU_MASK=15$' out/.config
           grep -q '^CONFIG_BIG_CPU_MASK=112$' out/.config
@@ -235,21 +264,21 @@ jobs:
           ! grep -q '^CONFIG_KPROBES=y$' out/.config
           grep -q '^CONFIG_LTO_CLANG=y$' out/.config
           grep -q '^CONFIG_LTO_CLANG_FULL=y$' out/.config
-          grep -q '^# CONFIG_KSU is not set$' out/.config
+          grep -q '^CONFIG_KSU=y$' out/.config
 
           make $MAKE_ARGS -j"$(nproc)" Image.gz-dtb
           ls -l out/arch/arm64/boot/Image out/arch/arm64/boot/Image.gz out/arch/arm64/boot/Image.gz-dtb || true
 
-          mkdir -p "$GITHUB_WORKSPACE/munch-fusionx-baseline-output"
-          cp out/arch/arm64/boot/Image.gz-dtb "$GITHUB_WORKSPACE/munch-fusionx-baseline-output/Image.gz-dtb"
-          cp out/arch/arm64/boot/Image "$GITHUB_WORKSPACE/munch-fusionx-baseline-output/Image.raw"
-          cp out/.config "$GITHUB_WORKSPACE/munch-fusionx-baseline-output/kernel.config"
-          sha256sum "$GITHUB_WORKSPACE/munch-fusionx-baseline-output/Image.gz-dtb" "$GITHUB_WORKSPACE/munch-fusionx-baseline-output/Image.raw" | tee "$GITHUB_WORKSPACE/munch-fusionx-baseline-output/SHA256SUMS"
-          strings "$GITHUB_WORKSPACE/munch-fusionx-baseline-output/Image.raw" | grep -m1 'Linux version' | tee "$GITHUB_WORKSPACE/munch-fusionx-baseline-output/kernel-version.txt" || true
+          mkdir -p "$GITHUB_WORKSPACE/munch-fusionx-ksunext-output"
+          cp out/arch/arm64/boot/Image.gz-dtb "$GITHUB_WORKSPACE/munch-fusionx-ksunext-output/Image.gz-dtb"
+          cp out/arch/arm64/boot/Image "$GITHUB_WORKSPACE/munch-fusionx-ksunext-output/Image.raw"
+          cp out/.config "$GITHUB_WORKSPACE/munch-fusionx-ksunext-output/kernel.config"
+          sha256sum "$GITHUB_WORKSPACE/munch-fusionx-ksunext-output/Image.gz-dtb" "$GITHUB_WORKSPACE/munch-fusionx-ksunext-output/Image.raw" | tee "$GITHUB_WORKSPACE/munch-fusionx-ksunext-output/SHA256SUMS"
+          strings "$GITHUB_WORKSPACE/munch-fusionx-ksunext-output/Image.raw" | grep -m1 'Linux version' | tee "$GITHUB_WORKSPACE/munch-fusionx-ksunext-output/kernel-version.txt" || true
 
-      - name: Upload baseline kernel image
+      - name: Upload KSU kernel image
         uses: actions/upload-artifact@v4
         with:
           name: ${{ inputs.phonea }}-${{ inputs.roota }}-stable-next-image
-          path: munch-fusionx-baseline-output/*
+          path: munch-fusionx-ksunext-output/*
           retention-days: 3
