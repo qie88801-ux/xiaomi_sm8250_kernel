@@ -52,6 +52,8 @@ jobs:
             sed -i 's/!defined(CONFIG_KSU_KPROBES_HOOK)/!defined(CONFIG_KPROBES)/g' "$hook_file"
           done
           ! grep -RIn 'KSU_KPROBES_HOOK' fs drivers kernel security
+          sed -i 's/^#ifdef CONFIG_KSU$/#if defined(CONFIG_KSU) \&\& !defined(CONFIG_KPROBES)/' drivers/input/input.c
+          grep -nE 'CONFIG_KSU|ksu_input_hook|ksu_handle_input_handle_event' drivers/input/input.c
           echo "[Patch KernelSU-Next old execve ksud API wrapper]"
           cat >> drivers/kernelsu/ksud.c <<'EOF'
           
