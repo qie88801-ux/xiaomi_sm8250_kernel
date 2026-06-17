@@ -86,11 +86,22 @@ jobs:
           from pathlib import Path
           p = Path("kernel/async.c")
           s = p.read_text()
-          old = '''\tktime_t uninitialized_var(calltime), delta, rettime;\n\n\t/* 1) run (and print duration) */'''
-          new = '''\tktime_t uninitialized_var(calltime), delta, rettime;\n\n\tif (system_state < SYSTEM_RUNNING)\n\t\tpr_err("munch_async: start cookie=%lli func=%pF pid=%i\\n",\n\t\t       (long long)entry->cookie, entry->func, task_pid_nr(current));\n\n\t/* 1) run (and print duration) */'''
-          if old not in s:
+          start_patterns = [
+              (
+                  '''\tktime_t uninitialized_var(calltime), delta, rettime;\n\n\t/* 1) run (and print duration) */''',
+                  '''\tktime_t uninitialized_var(calltime), delta, rettime;\n\n\tif (system_state < SYSTEM_RUNNING)\n\t\tpr_err("munch_async: start cookie=%lli func=%pF pid=%i\\n",\n\t\t       (long long)entry->cookie, entry->func, task_pid_nr(current));\n\n\t/* 1) run (and print duration) */''',
+              ),
+              (
+                  '''\tktime_t calltime, delta, rettime;\n\n\t/* 1) run (and print duration) */''',
+                  '''\tktime_t calltime, delta, rettime;\n\n\tif (system_state < SYSTEM_RUNNING)\n\t\tpr_err("munch_async: start cookie=%lli func=%pF pid=%i\\n",\n\t\t       (long long)entry->cookie, entry->func, task_pid_nr(current));\n\n\t/* 1) run (and print duration) */''',
+              ),
+          ]
+          for old, new in start_patterns:
+              if old in s:
+                  s = s.replace(old, new, 1)
+                  break
+          else:
               raise SystemExit("missing async start pattern")
-          s = s.replace(old, new, 1)
           old = '''\t/* 2) remove self from the pending queues */\n\tspin_lock_irqsave(&async_lock, flags);'''
           new = '''\tif (system_state < SYSTEM_RUNNING)\n\t\tpr_err("munch_async: done cookie=%lli func=%pF pid=%i\\n",\n\t\t       (long long)entry->cookie, entry->func, task_pid_nr(current));\n\n\t/* 2) remove self from the pending queues */\n\tspin_lock_irqsave(&async_lock, flags);'''
           if old not in s:
