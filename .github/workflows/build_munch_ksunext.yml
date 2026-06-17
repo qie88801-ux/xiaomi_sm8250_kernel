@@ -78,6 +78,55 @@ jobs:
 
           perl -0pi -e 's@(\nSYSCALL_DEFINE4\(reboot, int, magic1, int, magic2, unsigned int, cmd,\n\t\tvoid __user \*, arg\)\n\{\n)(\tstruct pid_namespace \*pid_ns = task_active_pid_ns\(current\);\n\tchar buffer\[256\];\n\tint ret = 0;\n)@\n#ifdef CONFIG_KSU\nextern int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void __user **arg);\n#endif\n$1$2#ifdef CONFIG_KSU\n\tksu_handle_sys_reboot(magic1, magic2, cmd, &arg);\n#endif\n@' kernel/reboot.c
 
+          grep -q "select MODULE_REL_CRCS if MODVERSIONS" arch/arm64/Kconfig || \
+            sed -i '/select HAVE_ARCH_PREL32_RELOCATIONS/a\\tselect MODULE_REL_CRCS if MODVERSIONS' arch/arm64/Kconfig
+
+          if ! grep -q "^int path_umount(struct path \\*path, int flags)" fs/namespace.c; then
+            tmp_path_umount=$(mktemp)
+            cat > "$tmp_path_umount" <<'EOF'
+          static int can_umount(const struct path *path, int flags)
+          {
+              struct mount *mnt = real_mount(path->mnt);
+
+              if (flags & ~(MNT_FORCE | MNT_DETACH | MNT_EXPIRE | UMOUNT_NOFOLLOW))
+                  return -EINVAL;
+              if (!may_mount())
+                  return -EPERM;
+              if (path->dentry != path->mnt->mnt_root)
+                  return -EINVAL;
+              if (!check_mnt(mnt))
+                  return -EINVAL;
+              if (mnt->mnt.mnt_flags & MNT_LOCKED)
+                  return -EINVAL;
+              if (flags & MNT_FORCE && !capable(CAP_SYS_ADMIN))
+                  return -EPERM;
+
+              return 0;
+          }
+
+          int path_umount(struct path *path, int flags)
+          {
+              struct mount *mnt = real_mount(path->mnt);
+              int ret;
+
+              ret = can_umount(path, flags);
+              if (!ret)
+                  ret = do_umount(mnt, flags);
+
+              dput(path->dentry);
+              mntput_no_expire(mnt);
+              return ret;
+          }
+
+          EOF
+            awk 'FNR==NR { patch = patch $0 ORS; next } /^static bool is_mnt_ns_file/ && !done { printf "%s", patch; done = 1 } { print }' "$tmp_path_umount" fs/namespace.c > fs/namespace.c.new
+            mv fs/namespace.c.new fs/namespace.c
+            rm "$tmp_path_umount"
+          fi
+
+          grep -q "^int path_umount(struct path \\*path, int flags);" fs/internal.h || \
+            sed -i '/^extern void __init mnt_init/i int path_umount(struct path *path, int flags);' fs/internal.h
+
           if grep -q "struct selinux_state selinux_state __rticdata;" security/selinux/hooks.c; then
             perl -0pi -e 's/struct selinux_state selinux_state __rticdata;/struct selinux_state selinux_state;/' security/selinux/hooks.c
           fi
