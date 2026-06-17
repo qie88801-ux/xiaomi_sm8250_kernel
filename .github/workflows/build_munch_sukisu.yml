@@ -105,6 +105,20 @@ jobs:
               "bool ksu_type_member(struct policydb *db, const char *src, const char *tgt, const char *cls, const char *def) { (void)db; (void)src; (void)tgt; (void)cls; (void)def; return false; }\n"
               "bool ksu_genfscon(struct policydb *db, const char *fs_name, const char *path, const char *ctx) { (void)db; (void)fs_name; (void)path; (void)ctx; return false; }\n"
               "};' drivers/kernelsu/selinux/sepolicy.c\n"
+              "    perl -0pi -e '$_=q{#include <linux/init.h>\n"
+              "#include <linux/printk.h>\n"
+              "#include \"selinux_hide.h\"\n"
+              "\n"
+              "void __init ksu_selinux_hide_init(void)\n"
+              "{\n"
+              "    pr_info(\"selinux_hide: disabled on this 4.19 build\\n\");\n"
+              "}\n"
+              "\n"
+              "void __exit ksu_selinux_hide_exit(void) {}\n"
+              "void ksu_selinux_hide_drop_backup_if_unused(void) {}\n"
+              "void ksu_selinux_hide_handle_second_stage(void) {}\n"
+              "void ksu_selinux_hide_handle_post_fs_data(void) {}\n"
+              "};' drivers/kernelsu/feature/selinux_hide.c\n"
               '    tmp_ksu_init=$(mktemp)\n'
               '    printf "#ifndef MODULE_IMPORT_NS\\n#define MODULE_IMPORT_NS(ns)\\n#endif\\n" > "$tmp_ksu_init"\n'
               '    cat drivers/kernelsu/core/init.c >> "$tmp_ksu_init"\n'
