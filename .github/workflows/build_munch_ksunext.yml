@@ -127,8 +127,11 @@ jobs:
           grep -q "^int path_umount(struct path \\*path, int flags);" fs/internal.h || \
             sed -i '/^extern void __init mnt_init/i int path_umount(struct path *path, int flags);' fs/internal.h
 
+          sed -i 's/^EXPORT_SYMBOL(gsi_write_channel_scratch3_reg);$/\/\* EXPORT_SYMBOL(gsi_write_channel_scratch3_reg) disabled: missing generated modversion CRC in public munch source. \*\//' drivers/platform/msm/gsi/gsi.c
+          sed -i 's/^EXPORT_SYMBOL(gsi_write_channel_scratch2_reg);$/\/\* EXPORT_SYMBOL(gsi_write_channel_scratch2_reg) disabled: missing generated modversion CRC in public munch source. \*\//' drivers/platform/msm/gsi/gsi.c
           sed -i 's/^EXPORT_SYMBOL(gsi_write_channel_scratch);$/\/\* EXPORT_SYMBOL(gsi_write_channel_scratch) disabled: missing generated modversion CRC in public munch source. \*\//' drivers/platform/msm/gsi/gsi.c
           sed -i 's/^EXPORT_SYMBOL(gsi_read_channel_scratch);$/\/\* EXPORT_SYMBOL(gsi_read_channel_scratch) disabled: missing generated modversion CRC in public munch source. \*\//' drivers/platform/msm/gsi/gsi.c
+          sed -i 's/^EXPORT_SYMBOL(gsi_update_mhi_channel_scratch);$/\/\* EXPORT_SYMBOL(gsi_update_mhi_channel_scratch) disabled: missing generated modversion CRC in public munch source. \*\//' drivers/platform/msm/gsi/gsi.c
 
           if grep -q "struct selinux_state selinux_state __rticdata;" security/selinux/hooks.c; then
             perl -0pi -e 's/struct selinux_state selinux_state __rticdata;/struct selinux_state selinux_state;/' security/selinux/hooks.c
