@@ -1,5 +1,5 @@
 name: Build Munch SukiSU Kernel
-run-name: Build munch SukiSU Ultra KPM SUSFS
+run-name: Build munch SukiSU Ultra from MiCode 4.19.157
 on:
   workflow_dispatch:
     inputs:
@@ -35,110 +35,137 @@ jobs:
 
       - name: Build kernel
         run: |
+          set -euxo pipefail
           mkdir "$GITHUB_WORKSPACE/kernel_workspace"
           cd "$GITHUB_WORKSPACE/kernel_workspace"
-          git clone https://github.com/clcwpwqi/kernel_865_mod -b android15-lineage22-mod --depth=1 android_kernel
+          git clone https://github.com/MiCode/Xiaomi_Kernel_OpenSource -b munch-s-oss --depth=1 android_kernel
           cd android_kernel
-          python3 - <<'PY'
-          from pathlib import Path
-          p = Path('build-action.sh')
-          s = p.read_text()
-          s = s.replace('bash -s susfs-main', 'bash -s main')
-          setup = '    curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s main\n'
-          extra = (
-              '    curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s main\n'
-              '    perl -0pi -e "s@#ifdef CONFIG_KSU@#if 0 /* disabled legacy KernelSU hook */@g" fs/read_write.c fs/exec.c drivers/input/input.c drivers/tty/pty.c\n'
-              '    find -L drivers/kernelsu -name "*.c" -type f -exec sed -i "s/access_ok(/access_ok(VERIFY_READ, /g" {} +\n'
-              "    perl -0pi -e 's@#include <linux/pgtable.h>@#include <asm/pgtable.h>@g; s@#include <linux/uaccess.h>\\n@#include <linux/uaccess.h>\\n#ifndef strncpy_from_user_nofault\\n#define strncpy_from_user_nofault strncpy_from_user\\n#endif\\n@g' drivers/kernelsu/feature/sucompat.c\n"
-              "    perl -0pi -e 's@#include \"linux/uaccess.h\"\\n@#include \"linux/uaccess.h\"\\n#ifndef copy_to_kernel_nofault\\n#define copy_to_kernel_nofault probe_kernel_write\\n#endif\\n@g' drivers/kernelsu/hook/arm64/patch_memory.c\n"
-              "    perl -0pi -e 's@#include <linux/mount.h>\\n@#include <linux/mount.h>\\n#ifndef security_inode_init_security_anon\\n#define security_inode_init_security_anon(inode, qname, context_inode) ((void)(inode), (void)(qname), (void)(context_inode), 0)\\n#endif\\n#ifndef selinux_inode\\n#define selinux_inode(inode) ((struct inode_security_struct *)((inode)->i_security))\\n#endif\\n@g; s@#if LINUX_VERSION_CODE >= KERNEL_VERSION\\(6, 1, 0\\)\\nstatic int ksu_wrapper_iopoll.*?#endif\\n\\n@@s; s@// no REMAP_FILE_DEDUP: use file_in.*?static int ksu_wrapper_fadvise@static int ksu_wrapper_fadvise@s; s@^    p->ops\\.iopoll = .*\\n@@m; s@^    p->ops\\.remap_file_range = .*\\n@@m' drivers/kernelsu/infra/file_wrapper.c\n"
-              "    perl -0pi -e 's@#include <linux/seccomp.h>\\n@#include <linux/seccomp.h>\\n#include <asm/unistd.h>\\n#ifndef SECCOMP_ARCH_NATIVE_NR\\n#define SECCOMP_ARCH_NATIVE_NR __NR_syscalls\\n#endif\\n@g' drivers/kernelsu/infra/seccomp_cache.c\n"
-              "    perl -0pi -e 's@#include <uapi/linux/mount.h>@#include <uapi/linux/fs.h>\\n#include <asm/uaccess.h>@g; s@extern int path_mount\\(.*?\\);\\n\\n@@s; s@    // make root mount private\\n    struct path root_path;\\n    get_fs_root\\(current->fs, &root_path\\);\\n    int pm_ret = path_mount\\(NULL, &root_path, NULL, MS_PRIVATE \\| MS_REC, NULL\\);\\n    path_put\\(&root_path\\);@    // make root mount private\\n    mm_segment_t old_fs = get_fs();\\n    set_fs(KERNEL_DS);\\n    int pm_ret = ksys_mount(NULL, \"/\", NULL, MS_PRIVATE | MS_REC, NULL);\\n    set_fs(old_fs);@s' drivers/kernelsu/infra/su_mount_ns.c\n"
-              "    perl -0pi -e 's@#include <linux/version.h>\\n@#include <linux/version.h>\\n#include <linux/string.h>\\n@g; s@static const struct fsnotify_ops ksu_ops = \\{\\n    \\.handle_inode_event = ksu_handle_inode_event,\\n\\};@static int ksu_handle_event(struct fsnotify_group *group, struct inode *inode, u32 mask, const void *data,\\n                            int data_type, const unsigned char *file_name, u32 cookie,\\n                            struct fsnotify_iter_info *iter_info)\\n{\\n    struct qstr qname;\\n\\n    (void)group;\\n    (void)data;\\n    (void)data_type;\\n    (void)iter_info;\\n\\n    if (!file_name)\\n        return 0;\\n\\n    qname.name = file_name;\\n    qname.len = strlen(file_name);\\n    qname.hash = 0;\\n    return ksu_handle_inode_event(NULL, mask, inode, NULL, &qname, cookie);\\n}\\n\\nstatic const struct fsnotify_ops ksu_ops = {\\n    .handle_event = ksu_handle_event,\\n};@g' drivers/kernelsu/manager/pkg_observer.c\n"
-              "    perl -0pi -e 's@#include <linux/task_work.h>\\n@#include <linux/task_work.h>\\n#include <linux/sched/task.h>\\n#ifndef TWA_RESUME\\n#define TWA_RESUME 1\\n#endif\\n#ifndef fallthrough\\n#define fallthrough do {} while (0)\\n#endif\\n@g' drivers/kernelsu/policy/allowlist.c\n"
-              "    perl -0pi -e 's@void seccomp_filter_release\\(struct task_struct \\*tsk\\);\\n@@g; s@\\n    atomic_set\\(&current->seccomp\\.filter_count, 0\\);@@g; s@seccomp_filter_release\\(fake\\);@put_seccomp_filter(fake);@g' drivers/kernelsu/policy/app_profile.c\n"
-              "    perl -0pi -e 's@#include <linux/uaccess.h>\\n@#include <linux/uaccess.h>\\n#ifndef strncpy_from_user_nofault\\n#define strncpy_from_user_nofault strncpy_from_user\\n#endif\\n#ifndef copy_from_user_nofault\\n#define copy_from_user_nofault copy_from_user\\n#endif\\n#ifndef copy_to_user_nofault\\n#define copy_to_user_nofault copy_to_user\\n#endif\\n@g' drivers/kernelsu/runtime/ksud_integration.c\n"
-              "    perl -0pi -e 's@#include \"objsec.h\"\\n@#include \"objsec.h\"\\n#ifndef selinux_cred\\n#define selinux_cred(cred) ((struct task_security_struct *)((cred)->security))\\n#endif\\n@g' drivers/kernelsu/selinux/selinux.c\n"
-              "    perl -0pi -e 's@#include <linux/minmax.h>@#include <linux/kernel.h>@g; s@#include <linux/uaccess.h>\\n@#include <linux/uaccess.h>\\n#ifndef strncpy_from_user_nofault\\n#define strncpy_from_user_nofault strncpy_from_user\\n#endif\\n@g' drivers/kernelsu/sulog/event.c\n"
-              "    perl -0pi -e 's@#include <linux/thread_info.h>\\n@#include <linux/thread_info.h>\\n#include <linux/sched/task.h>\\n#include <linux/sched/signal.h>\\n@g' drivers/kernelsu/supercall/dispatch.c\n"
-              "    perl -0pi -e 's@#include <linux/task_work.h>\\n@#include <linux/task_work.h>\\n#ifndef TWA_RESUME\\n#define TWA_RESUME 1\\n#endif\\n@g' drivers/kernelsu/supercall/supercall.c\n"
-              "    perl -0pi -e '$_=q{#include <linux/errno.h>\n"
-              "#include <linux/printk.h>\n"
-              "#include <linux/types.h>\n"
-              "#include <linux/uaccess.h>\n"
-              "#include \"selinux.h\"\n"
-              "\n"
-              "struct selinux_policy *backup_sepolicy;\n"
-              "\n"
-              "void apply_kernelsu_rules(void)\n"
-              "{\n"
-              "    pr_info(\"KernelSU: dynamic SELinux rules disabled on this 4.19 build\\n\");\n"
-              "}\n"
-              "\n"
-              "int handle_sepolicy(void __user *user_data, u64 data_len)\n"
-              "{\n"
-              "    (void)user_data;\n"
-              "    (void)data_len;\n"
-              "    return -EOPNOTSUPP;\n"
-              "}\n"
-              "};' drivers/kernelsu/selinux/rules.c\n"
-              "    perl -0pi -e '$_=q{#include <linux/err.h>\n"
-              "#include <linux/errno.h>\n"
-              "#include \"sepolicy.h\"\n"
-              "\n"
-              "struct selinux_policy *ksu_dup_sepolicy(struct selinux_policy *old_pol) { (void)old_pol; return ERR_PTR(-EOPNOTSUPP); }\n"
-              "void ksu_destroy_sepolicy(struct selinux_policy *orig) { (void)orig; }\n"
-              "bool ksu_type(struct policydb *db, const char *name, const char *attr) { (void)db; (void)name; (void)attr; return false; }\n"
-              "bool ksu_attribute(struct policydb *db, const char *name) { (void)db; (void)name; return false; }\n"
-              "bool ksu_permissive(struct policydb *db, const char *type) { (void)db; (void)type; return false; }\n"
-              "bool ksu_enforce(struct policydb *db, const char *type) { (void)db; (void)type; return false; }\n"
-              "bool ksu_typeattribute(struct policydb *db, const char *type, const char *attr) { (void)db; (void)type; (void)attr; return false; }\n"
-              "bool ksu_exists(struct policydb *db, const char *type) { (void)db; (void)type; return false; }\n"
-              "bool ksu_allow(struct policydb *db, const char *src, const char *tgt, const char *cls, const char *perm) { (void)db; (void)src; (void)tgt; (void)cls; (void)perm; return false; }\n"
-              "bool ksu_deny(struct policydb *db, const char *src, const char *tgt, const char *cls, const char *perm) { (void)db; (void)src; (void)tgt; (void)cls; (void)perm; return false; }\n"
-              "bool ksu_auditallow(struct policydb *db, const char *src, const char *tgt, const char *cls, const char *perm) { (void)db; (void)src; (void)tgt; (void)cls; (void)perm; return false; }\n"
-              "bool ksu_dontaudit(struct policydb *db, const char *src, const char *tgt, const char *cls, const char *perm) { (void)db; (void)src; (void)tgt; (void)cls; (void)perm; return false; }\n"
-              "bool ksu_allowxperm(struct policydb *db, const char *src, const char *tgt, const char *cls, const char *range) { (void)db; (void)src; (void)tgt; (void)cls; (void)range; return false; }\n"
-              "bool ksu_auditallowxperm(struct policydb *db, const char *src, const char *tgt, const char *cls, const char *range) { (void)db; (void)src; (void)tgt; (void)cls; (void)range; return false; }\n"
-              "bool ksu_dontauditxperm(struct policydb *db, const char *src, const char *tgt, const char *cls, const char *range) { (void)db; (void)src; (void)tgt; (void)cls; (void)range; return false; }\n"
-              "bool ksu_type_transition(struct policydb *db, const char *src, const char *tgt, const char *cls, const char *def, const char *obj) { (void)db; (void)src; (void)tgt; (void)cls; (void)def; (void)obj; return false; }\n"
-              "bool ksu_type_change(struct policydb *db, const char *src, const char *tgt, const char *cls, const char *def) { (void)db; (void)src; (void)tgt; (void)cls; (void)def; return false; }\n"
-              "bool ksu_type_member(struct policydb *db, const char *src, const char *tgt, const char *cls, const char *def) { (void)db; (void)src; (void)tgt; (void)cls; (void)def; return false; }\n"
-              "bool ksu_genfscon(struct policydb *db, const char *fs_name, const char *path, const char *ctx) { (void)db; (void)fs_name; (void)path; (void)ctx; return false; }\n"
-              "};' drivers/kernelsu/selinux/sepolicy.c\n"
-              "    perl -0pi -e '$_=q{#include <linux/init.h>\n"
-              "#include <linux/printk.h>\n"
-              "#include \"selinux_hide.h\"\n"
-              "\n"
-              "void __init ksu_selinux_hide_init(void)\n"
-              "{\n"
-              "    pr_info(\"selinux_hide: disabled on this 4.19 build\\n\");\n"
-              "}\n"
-              "\n"
-              "void __exit ksu_selinux_hide_exit(void) {}\n"
-              "void ksu_selinux_hide_drop_backup_if_unused(void) {}\n"
-              "void ksu_selinux_hide_handle_second_stage(void) {}\n"
-              "void ksu_selinux_hide_handle_post_fs_data(void) {}\n"
-              "};' drivers/kernelsu/feature/selinux_hide.c\n"
-              '    tmp_ksu_init=$(mktemp)\n'
-              '    printf "#ifndef MODULE_IMPORT_NS\\n#define MODULE_IMPORT_NS(ns)\\n#endif\\n" > "$tmp_ksu_init"\n'
-              '    cat drivers/kernelsu/core/init.c >> "$tmp_ksu_init"\n'
-              '    mv "$tmp_ksu_init" drivers/kernelsu/core/init.c\n'
-          )
-          s = s.replace(setup, extra, 1)
-          s = s.replace('    -e KSU \\\n', '    -e KPROBES \\\n    -e KRETPROBES \\\n    -e KSU \\\n', 1)
-          p.write_text(s)
-          PY
-          grep -n -E 'bash -s main|access_ok|pgtable|nofault|file_wrapper|MODULE_IMPORT_NS|KPROBES|KRETPROBES|KSU' build-action.sh
-          bash build-action.sh "${{ inputs.phonea }}" "${{ inputs.roota }}"
-          echo '--- Final KSU config ---'
-          grep -E 'CONFIG_KPROBES|CONFIG_KRETPROBES|CONFIG_KSU|CONFIG_KSU_SUSFS|CONFIG_KPM' out/.config || true
 
-      - name: Upload flashable zip
+          export PATH="$GITHUB_WORKSPACE/proton-clang/proton-clang-20210522/bin:$PATH"
+          export ARCH=arm64
+          export SUBARCH=arm64
+          MAKE_ARGS="ARCH=arm64 SUBARCH=arm64 O=out CC=clang CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- CLANG_TRIPLE=aarch64-linux-gnu-"
+
+          echo "[kernel version]"
+          grep -E '^(VERSION|PATCHLEVEL|SUBLEVEL|EXTRAVERSION) =' Makefile
+          echo "[clang version]"
+          clang --version
+
+          curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s main
+
+          # Disable old hardcoded KernelSU hooks only if this source tree contains them.
+          if grep -q "ksu_vfs_read_hook" fs/read_write.c 2>/dev/null; then
+            perl -0pi -e "s@#ifdef CONFIG_KSU@#if 0 /* disabled legacy KernelSU hook */@g" fs/read_write.c fs/exec.c drivers/input/input.c drivers/tty/pty.c
+          fi
+
+          find -L drivers/kernelsu -name "*.c" -type f -exec sed -i "s/access_ok(/access_ok(VERIFY_READ, /g" {} +
+          perl -0pi -e 's@#include <linux/pgtable.h>@#include <asm/pgtable.h>@g; s@#include <linux/uaccess.h>\n@#include <linux/uaccess.h>\n#ifndef strncpy_from_user_nofault\n#define strncpy_from_user_nofault strncpy_from_user\n#endif\n@g' drivers/kernelsu/feature/sucompat.c
+          perl -0pi -e 's@#include "linux/uaccess.h"\n@#include "linux/uaccess.h"\n#ifndef copy_to_kernel_nofault\n#define copy_to_kernel_nofault probe_kernel_write\n#endif\n@g' drivers/kernelsu/hook/arm64/patch_memory.c
+          perl -0pi -e 's@#include <linux/mount.h>\n@#include <linux/mount.h>\n#ifndef security_inode_init_security_anon\n#define security_inode_init_security_anon(inode, qname, context_inode) ((void)(inode), (void)(qname), (void)(context_inode), 0)\n#endif\n#ifndef selinux_inode\n#define selinux_inode(inode) ((struct inode_security_struct *)((inode)->i_security))\n#endif\n@g; s@#if LINUX_VERSION_CODE >= KERNEL_VERSION\(6, 1, 0\)\nstatic int ksu_wrapper_iopoll.*?#endif\n\n@@s; s@// no REMAP_FILE_DEDUP: use file_in.*?static int ksu_wrapper_fadvise@static int ksu_wrapper_fadvise@s; s@^    p->ops\.iopoll = .*\n@@m; s@^    p->ops\.remap_file_range = .*\n@@m' drivers/kernelsu/infra/file_wrapper.c
+          perl -0pi -e 's@#include <linux/seccomp.h>\n@#include <linux/seccomp.h>\n#include <asm/unistd.h>\n#ifndef SECCOMP_ARCH_NATIVE_NR\n#define SECCOMP_ARCH_NATIVE_NR __NR_syscalls\n#endif\n@g' drivers/kernelsu/infra/seccomp_cache.c
+          perl -0pi -e 's@#include <uapi/linux/mount.h>@#include <uapi/linux/fs.h>\n#include <asm/uaccess.h>@g; s@extern int path_mount\(.*?\);\n\n@@s; s@    // make root mount private\n    struct path root_path;\n    get_fs_root\(current->fs, &root_path\);\n    int pm_ret = path_mount\(NULL, &root_path, NULL, MS_PRIVATE \| MS_REC, NULL\);\n    path_put\(&root_path\);@    // make root mount private\n    mm_segment_t old_fs = get_fs();\n    set_fs(KERNEL_DS);\n    int pm_ret = ksys_mount(NULL, "/", NULL, MS_PRIVATE | MS_REC, NULL);\n    set_fs(old_fs);@s' drivers/kernelsu/infra/su_mount_ns.c
+          perl -0pi -e 's@#include <linux/version.h>\n@#include <linux/version.h>\n#include <linux/string.h>\n@g; s@static const struct fsnotify_ops ksu_ops = \{\n    \.handle_inode_event = ksu_handle_inode_event,\n\};@static int ksu_handle_event(struct fsnotify_group *group, struct inode *inode, u32 mask, const void *data,\n                            int data_type, const unsigned char *file_name, u32 cookie,\n                            struct fsnotify_iter_info *iter_info)\n{\n    struct qstr qname;\n\n    (void)group;\n    (void)data;\n    (void)data_type;\n    (void)iter_info;\n\n    if (!file_name)\n        return 0;\n\n    qname.name = file_name;\n    qname.len = strlen(file_name);\n    qname.hash = 0;\n    return ksu_handle_inode_event(NULL, mask, inode, NULL, &qname, cookie);\n}\n\nstatic const struct fsnotify_ops ksu_ops = {\n    .handle_event = ksu_handle_event,\n};@g' drivers/kernelsu/manager/pkg_observer.c
+          perl -0pi -e 's@#include <linux/task_work.h>\n@#include <linux/task_work.h>\n#include <linux/sched/task.h>\n#ifndef TWA_RESUME\n#define TWA_RESUME 1\n#endif\n#ifndef fallthrough\n#define fallthrough do {} while (0)\n#endif\n@g' drivers/kernelsu/policy/allowlist.c
+          perl -0pi -e 's@void seccomp_filter_release\(struct task_struct \*tsk\);\n@@g; s@\n    atomic_set\(&current->seccomp\.filter_count, 0\);@@g; s@seccomp_filter_release\(fake\);@put_seccomp_filter(fake);@g' drivers/kernelsu/policy/app_profile.c
+          perl -0pi -e 's@#include <linux/uaccess.h>\n@#include <linux/uaccess.h>\n#ifndef strncpy_from_user_nofault\n#define strncpy_from_user_nofault strncpy_from_user\n#endif\n#ifndef copy_from_user_nofault\n#define copy_from_user_nofault copy_from_user\n#endif\n#ifndef copy_to_user_nofault\n#define copy_to_user_nofault copy_to_user\n#endif\n@g' drivers/kernelsu/runtime/ksud_integration.c
+          perl -0pi -e 's@#include "objsec.h"\n@#include "objsec.h"\n#ifndef selinux_cred\n#define selinux_cred(cred) ((struct task_security_struct *)((cred)->security))\n#endif\n@g' drivers/kernelsu/selinux/selinux.c
+          perl -0pi -e 's@#include <linux/minmax.h>@#include <linux/kernel.h>@g; s@#include <linux/uaccess.h>\n@#include <linux/uaccess.h>\n#ifndef strncpy_from_user_nofault\n#define strncpy_from_user_nofault strncpy_from_user\n#endif\n@g' drivers/kernelsu/sulog/event.c
+          perl -0pi -e 's@#include <linux/thread_info.h>\n@#include <linux/thread_info.h>\n#include <linux/sched/task.h>\n#include <linux/sched/signal.h>\n@g' drivers/kernelsu/supercall/dispatch.c
+          perl -0pi -e 's@#include <linux/task_work.h>\n@#include <linux/task_work.h>\n#ifndef TWA_RESUME\n#define TWA_RESUME 1\n#endif\n@g' drivers/kernelsu/supercall/supercall.c
+
+          cat > drivers/kernelsu/selinux/rules.c <<'EOF'
+          #include <linux/errno.h>
+          #include <linux/printk.h>
+          #include <linux/types.h>
+          #include <linux/uaccess.h>
+          #include "selinux.h"
+
+          struct selinux_policy *backup_sepolicy;
+
+          void apply_kernelsu_rules(void)
+          {
+              pr_info("KernelSU: dynamic SELinux rules disabled on this 4.19 build\n");
+          }
+
+          int handle_sepolicy(void __user *user_data, u64 data_len)
+          {
+              (void)user_data;
+              (void)data_len;
+              return -EOPNOTSUPP;
+          }
+          EOF
+
+          cat > drivers/kernelsu/selinux/sepolicy.c <<'EOF'
+          #include <linux/err.h>
+          #include <linux/errno.h>
+          #include "sepolicy.h"
+
+          struct selinux_policy *ksu_dup_sepolicy(struct selinux_policy *old_pol) { (void)old_pol; return ERR_PTR(-EOPNOTSUPP); }
+          void ksu_destroy_sepolicy(struct selinux_policy *orig) { (void)orig; }
+          bool ksu_type(struct policydb *db, const char *name, const char *attr) { (void)db; (void)name; (void)attr; return false; }
+          bool ksu_attribute(struct policydb *db, const char *name) { (void)db; (void)name; return false; }
+          bool ksu_permissive(struct policydb *db, const char *type) { (void)db; (void)type; return false; }
+          bool ksu_enforce(struct policydb *db, const char *type) { (void)db; (void)type; return false; }
+          bool ksu_typeattribute(struct policydb *db, const char *type, const char *attr) { (void)db; (void)type; (void)attr; return false; }
+          bool ksu_exists(struct policydb *db, const char *type) { (void)db; (void)type; return false; }
+          bool ksu_allow(struct policydb *db, const char *src, const char *tgt, const char *cls, const char *perm) { (void)db; (void)src; (void)tgt; (void)cls; (void)perm; return false; }
+          bool ksu_deny(struct policydb *db, const char *src, const char *tgt, const char *cls, const char *perm) { (void)db; (void)src; (void)tgt; (void)cls; (void)perm; return false; }
+          bool ksu_auditallow(struct policydb *db, const char *src, const char *tgt, const char *cls, const char *perm) { (void)db; (void)src; (void)tgt; (void)cls; (void)perm; return false; }
+          bool ksu_dontaudit(struct policydb *db, const char *src, const char *tgt, const char *cls, const char *perm) { (void)db; (void)src; (void)tgt; (void)cls; (void)perm; return false; }
+          bool ksu_allowxperm(struct policydb *db, const char *src, const char *tgt, const char *cls, const char *range) { (void)db; (void)src; (void)tgt; (void)cls; (void)range; return false; }
+          bool ksu_auditallowxperm(struct policydb *db, const char *src, const char *tgt, const char *cls, const char *range) { (void)db; (void)src; (void)tgt; (void)cls; (void)range; return false; }
+          bool ksu_dontauditxperm(struct policydb *db, const char *src, const char *tgt, const char *cls, const char *range) { (void)db; (void)src; (void)tgt; (void)cls; (void)range; return false; }
+          bool ksu_type_transition(struct policydb *db, const char *src, const char *tgt, const char *cls, const char *def, const char *obj) { (void)db; (void)src; (void)tgt; (void)cls; (void)def; (void)obj; return false; }
+          bool ksu_type_change(struct policydb *db, const char *src, const char *tgt, const char *cls, const char *def) { (void)db; (void)src; (void)tgt; (void)cls; (void)def; return false; }
+          bool ksu_type_member(struct policydb *db, const char *src, const char *tgt, const char *cls, const char *def) { (void)db; (void)src; (void)tgt; (void)cls; (void)def; return false; }
+          bool ksu_genfscon(struct policydb *db, const char *fs_name, const char *path, const char *ctx) { (void)db; (void)fs_name; (void)path; (void)ctx; return false; }
+          EOF
+
+          cat > drivers/kernelsu/feature/selinux_hide.c <<'EOF'
+          #include <linux/init.h>
+          #include <linux/printk.h>
+          #include "selinux_hide.h"
+
+          void __init ksu_selinux_hide_init(void)
+          {
+              pr_info("selinux_hide: disabled on this 4.19 build\n");
+          }
+
+          void __exit ksu_selinux_hide_exit(void) {}
+          void ksu_selinux_hide_drop_backup_if_unused(void) {}
+          void ksu_selinux_hide_handle_second_stage(void) {}
+          void ksu_selinux_hide_handle_post_fs_data(void) {}
+          EOF
+
+          tmp_ksu_init=$(mktemp)
+          printf "#ifndef MODULE_IMPORT_NS\n#define MODULE_IMPORT_NS(ns)\n#endif\n" > "$tmp_ksu_init"
+          cat drivers/kernelsu/core/init.c >> "$tmp_ksu_init"
+          mv "$tmp_ksu_init" drivers/kernelsu/core/init.c
+
+          make $MAKE_ARGS "${{ inputs.phonea }}_user_defconfig"
+          scripts/config --file out/.config \
+            -e KPROBES \
+            -e KRETPROBES \
+            -e KSU \
+            -e KPM \
+            -e KALLSYMS \
+            -e KALLSYMS_ALL
+          make $MAKE_ARGS olddefconfig
+
+          echo '--- Final KSU config ---'
+          grep -E 'CONFIG_KPROBES|CONFIG_KRETPROBES|CONFIG_KSU|CONFIG_KPM|CONFIG_KALLSYMS' out/.config || true
+
+          make $MAKE_ARGS -j"$(nproc)" Image
+
+          mkdir -p "$GITHUB_WORKSPACE/munch-output"
+          cp out/arch/arm64/boot/Image "$GITHUB_WORKSPACE/munch-output/Image"
+          cp out/.config "$GITHUB_WORKSPACE/munch-output/kernel.config"
+          sha256sum "$GITHUB_WORKSPACE/munch-output/Image" | tee "$GITHUB_WORKSPACE/munch-output/SHA256SUMS"
+          strings "$GITHUB_WORKSPACE/munch-output/Image" | grep -m1 'Linux version' | tee "$GITHUB_WORKSPACE/munch-output/kernel-version.txt" || true
+
+      - name: Upload kernel image
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ inputs.phonea }}-${{ inputs.roota }}-kernel-AnyKernel3
-          path: |
-            kernel_workspace/android_kernel/*.zip
-            kernel_workspace/android_kernel/anykernel/*.zip
+          name: ${{ inputs.phonea }}-${{ inputs.roota }}-micode-4.19.157-image
+          path: munch-output/*
           retention-days: 3
