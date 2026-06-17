@@ -103,6 +103,7 @@ jobs:
 
           make $MAKE_ARGS vendor/munch_defconfig
           scripts/config --file out/.config \
+            -e MODULES \
             -e KPROBES \
             -e KRETPROBES \
             -d KPROBE_EVENTS \
@@ -121,10 +122,11 @@ jobs:
           make $MAKE_ARGS olddefconfig
 
           echo '--- Final FusionX KSU Next config ---'
-          grep -E 'CONFIG_LOCALVERSION|CONFIG_KPROBES|CONFIG_KRETPROBES|CONFIG_KPROBE_EVENTS|CONFIG_KSU|CONFIG_MODVERSIONS|CONFIG_MIHW|CONFIG_BUILD_ARM64|CONFIG_LITTLE_CPU_MASK|CONFIG_BIG_CPU_MASK|CONFIG_PRIME_CPU_MASK|CONFIG_LTO|CONFIG_LTO_CLANG|CONFIG_LTO_NONE|CONFIG_CFI_CLANG|CONFIG_SHADOW_CALL_STACK' out/.config || true
+          grep -E 'CONFIG_LOCALVERSION|CONFIG_MODULES|CONFIG_KPROBES|CONFIG_KRETPROBES|CONFIG_KPROBE_EVENTS|CONFIG_KSU|CONFIG_MODVERSIONS|CONFIG_MIHW|CONFIG_BUILD_ARM64|CONFIG_LITTLE_CPU_MASK|CONFIG_BIG_CPU_MASK|CONFIG_PRIME_CPU_MASK|CONFIG_LTO|CONFIG_LTO_CLANG|CONFIG_LTO_NONE|CONFIG_CFI_CLANG|CONFIG_SHADOW_CALL_STACK' out/.config || true
           grep -q '^CONFIG_LITTLE_CPU_MASK=15$' out/.config
           grep -q '^CONFIG_BIG_CPU_MASK=112$' out/.config
           grep -q '^CONFIG_PRIME_CPU_MASK=128$' out/.config
+          grep -q '^CONFIG_MODULES=y$' out/.config
           grep -q '^CONFIG_KPROBES=y$' out/.config
           grep -q '^CONFIG_LTO_NONE=y$' out/.config
           ! grep -q '^CONFIG_LTO_CLANG=y$' out/.config
