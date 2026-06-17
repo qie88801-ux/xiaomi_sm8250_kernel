@@ -1,0 +1,234 @@
+name: Build Munch KSU Next Kernel
+run-name: Build munch KernelSU Next from MiCode 4.19.157
+on:
+  workflow_dispatch:
+    inputs:
+      phonea:
+        description: Device codename
+        required: true
+        default: munch
+        type: string
+      roota:
+        description: Root mode
+        required: true
+        default: ksunext
+        type: string
+
+jobs:
+  build_job:
+    runs-on: ubuntu-22.04
+    env:
+      CCACHE_COMPILERCHECK: "%compiler% -dumpmachine; %compiler% -dumpversion"
+      CCACHE_NOHASHDIR: "true"
+      CCACHE_HARDLINK: "true"
+      CI: "false"
+    steps:
+      - name: Prepare toolchain
+        run: |
+          mkdir "$GITHUB_WORKSPACE/proton-clang"
+          cd "$GITHUB_WORKSPACE/proton-clang"
+          wget https://github.com/kdrag0n/proton-clang/archive/refs/tags/20210522.zip
+          unzip 20210522.zip
+          cd ..
+          sudo apt update
+          sudo apt install -y build-essential git curl wget bison flex zip bc cpio libssl-dev ccache python-is-python3 \
+            gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi binutils-aarch64-linux-gnu binutils-arm-linux-gnueabi
+
+      - name: Build kernel
+        run: |
+          set -euxo pipefail
+          mkdir "$GITHUB_WORKSPACE/kernel_workspace"
+          cd "$GITHUB_WORKSPACE/kernel_workspace"
+          git clone https://github.com/MiCode/Xiaomi_Kernel_OpenSource -b munch-s-oss --depth=1 android_kernel
+          cd android_kernel
+
+          TOOLCHAIN="$GITHUB_WORKSPACE/proton-clang/proton-clang-20210522/bin"
+          ARM32_WRAP="$GITHUB_WORKSPACE/arm32-toolchain-wrapper"
+          mkdir -p "$ARM32_WRAP"
+          for tool in as ld objcopy elfedit gcc; do
+            ln -sf "/usr/bin/arm-linux-gnueabi-$tool" "$ARM32_WRAP/arm-linux-gnueabi-$tool"
+          done
+          ln -sf /usr/bin/arm-linux-gnueabi-as "$ARM32_WRAP/as"
+          ln -sf /usr/bin/arm-linux-gnueabi-ld "$ARM32_WRAP/ld"
+          export PATH="/usr/bin:$TOOLCHAIN:$PATH"
+          export ARCH=arm64
+          export SUBARCH=arm64
+          MAKE_ARGS="ARCH=arm64 SUBARCH=arm64 O=out CC=$TOOLCHAIN/clang LD=$TOOLCHAIN/ld.lld AR=$TOOLCHAIN/llvm-ar NM=$TOOLCHAIN/llvm-nm OBJCOPY=$TOOLCHAIN/llvm-objcopy OBJDUMP=$TOOLCHAIN/llvm-objdump READELF=$TOOLCHAIN/llvm-readelf STRIP=$TOOLCHAIN/llvm-strip CROSS_COMPILE=$TOOLCHAIN/aarch64-linux-gnu- CROSS_COMPILE_ARM32=$ARM32_WRAP/arm-linux-gnueabi- CROSS_COMPILE_COMPAT=$ARM32_WRAP/arm-linux-gnueabi- CLANG_TRIPLE=aarch64-linux-gnu-"
+
+          echo "[kernel version]"
+          grep -E '^(VERSION|PATCHLEVEL|SUBLEVEL|EXTRAVERSION) =' Makefile
+          echo "[clang version]"
+          "$TOOLCHAIN/clang" --version
+          echo "[lld version]"
+          "$TOOLCHAIN/ld.lld" --version
+
+          curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -s legacy
+
+          if grep -q "struct selinux_state selinux_state __rticdata;" security/selinux/hooks.c; then
+            perl -0pi -e 's/struct selinux_state selinux_state __rticdata;/struct selinux_state selinux_state;/' security/selinux/hooks.c
+          fi
+
+          if ! git grep -q "dsi_display_get_disp_param.*{" -- drivers/gpu/drm drivers/video techpack 2>/dev/null; then
+            cat >> drivers/gpu/drm/drm_sysfs.c <<'EOF'
+
+          /* Xiaomi public munch source declares these display helpers but does not
+           * ship their implementation. Keep connector sysfs present and make the
+           * unsupported private display hooks return deterministic no-op values.
+           */
+          int dsi_display_set_disp_param(struct drm_connector *connector, u32 param_type)
+          {
+              (void)connector;
+              (void)param_type;
+              return -EOPNOTSUPP;
+          }
+
+          int dsi_display_get_disp_param(struct drm_connector *connector, u32 *param_type)
+          {
+              (void)connector;
+              if (param_type)
+                  *param_type = 0;
+              return -EOPNOTSUPP;
+          }
+
+          ssize_t dsi_display_write_mipi_reg(struct drm_connector *connector, char *buf)
+          {
+              (void)connector;
+              (void)buf;
+              return -EOPNOTSUPP;
+          }
+
+          ssize_t dsi_display_read_mipi_reg(struct drm_connector *connector, char *buf)
+          {
+              (void)connector;
+              (void)buf;
+              return -EOPNOTSUPP;
+          }
+
+          ssize_t dsi_display_read_oled_pmic_id(struct drm_connector *connector, char *buf)
+          {
+              (void)connector;
+              (void)buf;
+              return -EOPNOTSUPP;
+          }
+
+          ssize_t dsi_display_read_panel_info(struct drm_connector *connector, char *buf)
+          {
+              (void)connector;
+              (void)buf;
+              return -EOPNOTSUPP;
+          }
+
+          ssize_t dsi_display_read_wp_info(struct drm_connector *connector, char *buf)
+          {
+              (void)connector;
+              (void)buf;
+              return -EOPNOTSUPP;
+          }
+
+          ssize_t dsi_display_read_dynamic_fps(struct drm_connector *connector, char *buf)
+          {
+              (void)connector;
+              (void)buf;
+              return -EOPNOTSUPP;
+          }
+
+          int dsi_display_set_doze_brightness(struct drm_connector *connector, int doze_brightness)
+          {
+              (void)connector;
+              (void)doze_brightness;
+              return -EOPNOTSUPP;
+          }
+
+          ssize_t dsi_display_get_doze_brightness(struct drm_connector *connector, char *buf)
+          {
+              (void)connector;
+              (void)buf;
+              return -EOPNOTSUPP;
+          }
+
+          int dsi_display_read_gamma_param(struct drm_connector *connector)
+          {
+              (void)connector;
+              return -EOPNOTSUPP;
+          }
+
+          ssize_t dsi_display_print_gamma_param(struct drm_connector *connector, char *buf)
+          {
+              (void)connector;
+              (void)buf;
+              return -EOPNOTSUPP;
+          }
+
+          ssize_t dsi_display_fod_get(struct drm_connector *connector, char *buf)
+          {
+              (void)connector;
+              (void)buf;
+              return -EOPNOTSUPP;
+          }
+
+          ssize_t complete_commit_time_get(struct drm_connector *connector, char *buf)
+          {
+              (void)connector;
+              (void)buf;
+              return -EOPNOTSUPP;
+          }
+
+          int dsi_display_set_thermal_hbm_disabled(struct drm_connector *connector, bool thermal_hbm_disabled)
+          {
+              (void)connector;
+              (void)thermal_hbm_disabled;
+              return -EOPNOTSUPP;
+          }
+
+          int dsi_display_get_thermal_hbm_disabled(struct drm_connector *connector, bool *thermal_hbm_disabled)
+          {
+              (void)connector;
+              if (thermal_hbm_disabled)
+                  *thermal_hbm_disabled = false;
+              return -EOPNOTSUPP;
+          }
+
+          ssize_t dsi_display_get_hw_vsync_info(struct drm_connector *connector, char *buf)
+          {
+              (void)connector;
+              (void)buf;
+              return -EOPNOTSUPP;
+          }
+
+          ssize_t smart_fps_value_show(struct device *device, struct device_attribute *attr, char *buf)
+          {
+              (void)device;
+              (void)attr;
+              return scnprintf(buf, PAGE_SIZE, "0\n");
+          }
+          EOF
+          fi
+
+          make $MAKE_ARGS "${{ inputs.phonea }}_user_defconfig"
+          scripts/config --file out/.config \
+            -e KPROBES \
+            -e KPROBE_EVENTS \
+            -e KSU \
+            -e KSU_KPROBE_HOOKS \
+            -e MODULE_REL_CRCS \
+            -e KALLSYMS \
+            -e KALLSYMS_ALL
+          make $MAKE_ARGS olddefconfig
+
+          echo '--- Final KSU Next config ---'
+          grep -E 'CONFIG_KPROBES|CONFIG_KPROBE_EVENTS|CONFIG_KSU|CONFIG_KSU_KPROBE_HOOKS|CONFIG_MODULE_REL_CRCS|CONFIG_MODVERSIONS|CONFIG_KALLSYMS' out/.config || true
+
+          make $MAKE_ARGS -j"$(nproc)" Image
+
+          mkdir -p "$GITHUB_WORKSPACE/munch-ksunext-output"
+          cp out/arch/arm64/boot/Image "$GITHUB_WORKSPACE/munch-ksunext-output/Image"
+          cp out/.config "$GITHUB_WORKSPACE/munch-ksunext-output/kernel.config"
+          sha256sum "$GITHUB_WORKSPACE/munch-ksunext-output/Image" | tee "$GITHUB_WORKSPACE/munch-ksunext-output/SHA256SUMS"
+          strings "$GITHUB_WORKSPACE/munch-ksunext-output/Image" | grep -m1 'Linux version' | tee "$GITHUB_WORKSPACE/munch-ksunext-output/kernel-version.txt" || true
+
+      - name: Upload kernel image
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.phonea }}-${{ inputs.roota }}-micode-4.19.157-image
+          path: munch-ksunext-output/*
+          retention-days: 3
