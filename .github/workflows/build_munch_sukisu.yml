@@ -53,7 +53,7 @@ jobs:
           export PATH="/usr/bin:$TOOLCHAIN:$PATH"
           export ARCH=arm64
           export SUBARCH=arm64
-          MAKE_ARGS="ARCH=arm64 SUBARCH=arm64 O=out CC=$TOOLCHAIN/clang CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- CROSS_COMPILE_COMPAT=$ARM32_WRAP/arm-linux-gnueabi- CLANG_TRIPLE=aarch64-linux-gnu-"
+          MAKE_ARGS="ARCH=arm64 SUBARCH=arm64 O=out CC=$TOOLCHAIN/clang CROSS_COMPILE=$TOOLCHAIN/aarch64-linux-gnu- CROSS_COMPILE_ARM32=$ARM32_WRAP/arm-linux-gnueabi- CROSS_COMPILE_COMPAT=$ARM32_WRAP/arm-linux-gnueabi- CLANG_TRIPLE=aarch64-linux-gnu-"
 
           echo "[kernel version]"
           grep -E '^(VERSION|PATCHLEVEL|SUBLEVEL|EXTRAVERSION) =' Makefile
