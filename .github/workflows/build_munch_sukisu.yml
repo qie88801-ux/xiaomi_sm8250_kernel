@@ -58,7 +58,7 @@ jobs:
               "    perl -0pi -e 's@void seccomp_filter_release\\(struct task_struct \\*tsk\\);\\n@@g; s@\\n    atomic_set\\(&current->seccomp\\.filter_count, 0\\);@@g; s@seccomp_filter_release\\(fake\\);@put_seccomp_filter(fake);@g' drivers/kernelsu/policy/app_profile.c\n"
               "    perl -0pi -e 's@#include <linux/uaccess.h>\\n@#include <linux/uaccess.h>\\n#ifndef strncpy_from_user_nofault\\n#define strncpy_from_user_nofault strncpy_from_user\\n#endif\\n#ifndef copy_from_user_nofault\\n#define copy_from_user_nofault copy_from_user\\n#endif\\n#ifndef copy_to_user_nofault\\n#define copy_to_user_nofault copy_to_user\\n#endif\\n@g' drivers/kernelsu/runtime/ksud_integration.c\n"
               "    perl -0pi -e 's@#include \"objsec.h\"\\n@#include \"objsec.h\"\\n#ifndef selinux_cred\\n#define selinux_cred(cred) ((struct task_security_struct *)((cred)->security))\\n#endif\\n@g' drivers/kernelsu/selinux/selinux.c\n"
-              "    perl -0pi -e 's@#include <linux/minmax.h>@#include <linux/kernel.h>@g' drivers/kernelsu/sulog/event.c\n"
+              "    perl -0pi -e 's@#include <linux/minmax.h>@#include <linux/kernel.h>@g; s@#include <linux/uaccess.h>\\n@#include <linux/uaccess.h>\\n#ifndef strncpy_from_user_nofault\\n#define strncpy_from_user_nofault strncpy_from_user\\n#endif\\n@g' drivers/kernelsu/sulog/event.c\n"
               "    perl -0pi -e '$_=q{#include <linux/errno.h>\n"
               "#include <linux/printk.h>\n"
               "#include <linux/types.h>\n"
