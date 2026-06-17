@@ -11,7 +11,7 @@ on:
       roota:
         description: Root mode
         required: true
-        default: ksunext-fusionx-nolto-kprobes
+        default: ksunext-fusionx-manual-fixed
         type: string
 
 jobs:
@@ -105,15 +105,10 @@ jobs:
 
           make $MAKE_ARGS vendor/munch_defconfig
           scripts/config --file out/.config \
-            -e MODULES \
-            -e KPROBES \
-            -e KRETPROBES \
+            -d MODULES \
+            -d KPROBES \
+            -d KRETPROBES \
             -d KPROBE_EVENTS \
-            -d LTO \
-            -d LTO_CLANG \
-            -d LTO_CLANG_FULL \
-            -d LTO_CLANG_THIN \
-            -e LTO_NONE \
             -d CFI_CLANG \
             -d SHADOW_CALL_STACK \
             --set-val LITTLE_CPU_MASK 15 \
@@ -128,10 +123,11 @@ jobs:
           grep -q '^CONFIG_LITTLE_CPU_MASK=15$' out/.config
           grep -q '^CONFIG_BIG_CPU_MASK=112$' out/.config
           grep -q '^CONFIG_PRIME_CPU_MASK=128$' out/.config
-          grep -q '^CONFIG_MODULES=y$' out/.config
-          grep -q '^CONFIG_KPROBES=y$' out/.config
-          grep -q '^CONFIG_LTO_NONE=y$' out/.config
-          ! grep -q '^CONFIG_LTO_CLANG=y$' out/.config
+          grep -q '^# CONFIG_MODULES is not set$' out/.config
+          ! grep -q '^CONFIG_KPROBES=y$' out/.config
+          grep -q '^CONFIG_LTO_CLANG=y$' out/.config
+          grep -q '^CONFIG_LTO_CLANG_FULL=y$' out/.config
+          grep -q '^CONFIG_KSU=y$' out/.config
 
           make $MAKE_ARGS -j"$(nproc)" Image.gz-dtb
           ls -l out/arch/arm64/boot/Image out/arch/arm64/boot/Image.gz out/arch/arm64/boot/Image.gz-dtb || true
