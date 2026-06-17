@@ -31,7 +31,8 @@ jobs:
           unzip 20210522.zip
           cd ..
           sudo apt update
-          sudo apt install -y build-essential git curl wget bison flex zip bc cpio libssl-dev ccache python-is-python3
+          sudo apt install -y build-essential git curl wget bison flex zip bc cpio libssl-dev ccache python-is-python3 \
+            gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi binutils-aarch64-linux-gnu binutils-arm-linux-gnueabi
 
       - name: Build kernel
         run: |
@@ -41,15 +42,23 @@ jobs:
           git clone https://github.com/MiCode/Xiaomi_Kernel_OpenSource -b munch-s-oss --depth=1 android_kernel
           cd android_kernel
 
-          export PATH="$GITHUB_WORKSPACE/proton-clang/proton-clang-20210522/bin:$PATH"
+          TOOLCHAIN="$GITHUB_WORKSPACE/proton-clang/proton-clang-20210522/bin"
+          ARM32_WRAP="$GITHUB_WORKSPACE/arm32-toolchain-wrapper"
+          mkdir -p "$ARM32_WRAP"
+          for tool in as ld objcopy elfedit gcc; do
+            ln -sf "/usr/bin/arm-linux-gnueabi-$tool" "$ARM32_WRAP/arm-linux-gnueabi-$tool"
+          done
+          ln -sf /usr/bin/arm-linux-gnueabi-as "$ARM32_WRAP/as"
+          ln -sf /usr/bin/arm-linux-gnueabi-ld "$ARM32_WRAP/ld"
+          export PATH="$ARM32_WRAP:/usr/bin:$TOOLCHAIN:$PATH"
           export ARCH=arm64
           export SUBARCH=arm64
-          MAKE_ARGS="ARCH=arm64 SUBARCH=arm64 O=out CC=clang CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- CLANG_TRIPLE=aarch64-linux-gnu-"
+          MAKE_ARGS="ARCH=arm64 SUBARCH=arm64 O=out CC=$TOOLCHAIN/clang CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- CROSS_COMPILE_COMPAT=$ARM32_WRAP/arm-linux-gnueabi- CLANG_TRIPLE=aarch64-linux-gnu-"
 
           echo "[kernel version]"
           grep -E '^(VERSION|PATCHLEVEL|SUBLEVEL|EXTRAVERSION) =' Makefile
           echo "[clang version]"
-          clang --version
+          "$TOOLCHAIN/clang" --version
 
           curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s main
 
