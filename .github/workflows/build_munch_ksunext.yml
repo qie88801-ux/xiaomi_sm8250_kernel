@@ -23,6 +23,9 @@ jobs:
       CCACHE_HARDLINK: "true"
       CI: "false"
     steps:
+      - name: Checkout workflow assets
+        uses: actions/checkout@v4
+
       - name: Prepare toolchain
         run: |
           mkdir "$GITHUB_WORKSPACE/proton-clang"
@@ -77,9 +80,6 @@ jobs:
           perl -0pi -e 's@(\n#if !defined\(__ARCH_WANT_STAT64\) \|\| defined\(__ARCH_WANT_SYS_NEWFSTATAT\)\nSYSCALL_DEFINE4\(newfstatat, int, dfd, const char __user \*, filename,\n\t\tstruct stat __user \*, statbuf, int, flag\)\n\{\n)(\tstruct kstat stat;\n\tint error;)@\n#ifdef CONFIG_KSU\nextern int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags);\n#endif\n$1#ifdef CONFIG_KSU\n\tksu_handle_stat(&dfd, &filename, &flag);\n#endif\n$2@' fs/stat.c
 
           perl -0pi -e 's@(\nSYSCALL_DEFINE4\(reboot, int, magic1, int, magic2, unsigned int, cmd,\n\t\tvoid __user \*, arg\)\n\{\n)(\tstruct pid_namespace \*pid_ns = task_active_pid_ns\(current\);\n\tchar buffer\[256\];\n\tint ret = 0;\n)@\n#ifdef CONFIG_KSU\nextern int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void __user **arg);\n#endif\n$1$2#ifdef CONFIG_KSU\n\tksu_handle_sys_reboot(magic1, magic2, cmd, &arg);\n#endif\n@' kernel/reboot.c
-
-          grep -q "select MODULE_REL_CRCS if MODVERSIONS" arch/arm64/Kconfig || \
-            sed -i '/select HAVE_ARCH_PREL32_RELOCATIONS/a\\tselect MODULE_REL_CRCS if MODVERSIONS' arch/arm64/Kconfig
 
           if ! grep -q "^int path_umount(struct path \\*path, int flags)" fs/namespace.c; then
             tmp_path_umount=$(mktemp)
@@ -269,20 +269,22 @@ jobs:
           EOF
           fi
 
-          make $MAKE_ARGS "${{ inputs.phonea }}_user_defconfig"
+          mkdir -p out
+          cp "$GITHUB_WORKSPACE/.github/kernel_configs/munch_os1.0.15.0_stock.config" out/.config
+          echo '--- Stock config baseline ---'
+          grep -E 'CONFIG_MIHW|CONFIG_KPROBES|CONFIG_KRETPROBES|CONFIG_KPROBE_EVENTS|CONFIG_MODVERSIONS|CONFIG_MODULE_REL_CRCS|CONFIG_BUILD_ARM64' out/.config || true
           scripts/config --file out/.config \
-            -e KPROBES \
-            -e KPROBE_EVENTS \
+            -d KPROBES \
+            -d KRETPROBES \
+            -d KPROBE_EVENTS \
             -e KSU \
             -e KSU_MANUAL_HOOK \
             -d KSU_KPROBES_HOOK \
-            -e MODULE_REL_CRCS \
-            -e KALLSYMS \
-            -e KALLSYMS_ALL
+            -d MODULE_REL_CRCS
           make $MAKE_ARGS olddefconfig
 
           echo '--- Final KSU Next config ---'
-          grep -E 'CONFIG_KPROBES|CONFIG_KPROBE_EVENTS|CONFIG_KSU|CONFIG_KSU_MANUAL_HOOK|CONFIG_KSU_KPROBES_HOOK|CONFIG_MODULE_REL_CRCS|CONFIG_MODVERSIONS|CONFIG_KALLSYMS' out/.config || true
+          grep -E 'CONFIG_MIHW|CONFIG_KPROBES|CONFIG_KRETPROBES|CONFIG_KPROBE_EVENTS|CONFIG_KSU|CONFIG_KSU_MANUAL_HOOK|CONFIG_KSU_KPROBES_HOOK|CONFIG_MODULE_REL_CRCS|CONFIG_MODVERSIONS|CONFIG_KALLSYMS|CONFIG_BUILD_ARM64' out/.config || true
 
           make $MAKE_ARGS -j"$(nproc)" Image
 
