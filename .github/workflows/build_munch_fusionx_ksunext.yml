@@ -1,5 +1,5 @@
-name: Build Munch FusionX Async Marker Kernel
-run-name: Build munch FusionX no-KSU async markers
+name: Build Munch FusionX Kernel Init Marker Kernel
+run-name: Build munch FusionX no-KSU kernel-init markers
 on:
   workflow_dispatch:
     inputs:
@@ -11,7 +11,7 @@ on:
       roota:
         description: Root mode
         required: true
-        default: fusionx-baseline-noksu-console-asyncmarkers
+        default: fusionx-baseline-noksu-console-kinitmarkers
         type: string
 
 jobs:
@@ -81,6 +81,60 @@ jobs:
           p.write_text(s)
           PY
           grep -n 'munch_debug' init/main.c
+          echo "[Add kernel_init post-freeable progress markers]"
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("init/main.c")
+          s = p.read_text()
+          replacements = [
+              (
+                  '\tkernel_init_freeable();\n\t/* need to finish all async __init code before freeing the memory */',
+                  '\tkernel_init_freeable();\n\tpr_err("munch_kinit: after kernel_init_freeable before async_synchronize_full\\n");\n\t/* need to finish all async __init code before freeing the memory */',
+              ),
+              (
+                  '\tasync_synchronize_full();\n\tftrace_free_init_mem();',
+                  '\tasync_synchronize_full();\n\tpr_err("munch_kinit: after async_synchronize_full before ftrace_free_init_mem\\n");\n\tftrace_free_init_mem();',
+              ),
+              (
+                  '\tftrace_free_init_mem();\n\tfree_initmem();',
+                  '\tftrace_free_init_mem();\n\tpr_err("munch_kinit: after ftrace_free_init_mem before free_initmem\\n");\n\tfree_initmem();',
+              ),
+              (
+                  '\tfree_initmem();\n\tmark_readonly();',
+                  '\tfree_initmem();\n\tpr_err("munch_kinit: after free_initmem before mark_readonly\\n");\n\tmark_readonly();',
+              ),
+              (
+                  '\tmark_readonly();\n\n\t/*\n\t * Kernel mappings are now finalized',
+                  '\tmark_readonly();\n\tpr_err("munch_kinit: after mark_readonly before pti_finalize\\n");\n\n\t/*\n\t * Kernel mappings are now finalized',
+              ),
+              (
+                  '\tpti_finalize();\n\n\tsystem_state = SYSTEM_RUNNING;',
+                  '\tpti_finalize();\n\tpr_err("munch_kinit: after pti_finalize before system_state\\n");\n\n\tsystem_state = SYSTEM_RUNNING;',
+              ),
+              (
+                  '\tsystem_state = SYSTEM_RUNNING;\n\tnuma_default_policy();',
+                  '\tsystem_state = SYSTEM_RUNNING;\n\tpr_err("munch_kinit: after system_state before numa_default_policy\\n");\n\tnuma_default_policy();',
+              ),
+              (
+                  '\tnuma_default_policy();\n\n\trcu_end_inkernel_boot();',
+                  '\tnuma_default_policy();\n\tpr_err("munch_kinit: after numa_default_policy before rcu_end_inkernel_boot\\n");\n\n\trcu_end_inkernel_boot();',
+              ),
+              (
+                  '\trcu_end_inkernel_boot();\n\n\tif (ramdisk_execute_command) {',
+                  '\trcu_end_inkernel_boot();\n\tpr_err("munch_kinit: after rcu_end_inkernel_boot before ramdisk init ramdisk=%s execute=%s\\n",\n\t       ramdisk_execute_command ? ramdisk_execute_command : "(null)",\n\t       execute_command ? execute_command : "(null)");\n\n\tif (ramdisk_execute_command) {',
+              ),
+              (
+                  '\tif (ramdisk_execute_command) {\n\t\tret = run_init_process(ramdisk_execute_command);',
+                  '\tif (ramdisk_execute_command) {\n\t\tpr_err("munch_kinit: before run_init_process ramdisk=%s\\n", ramdisk_execute_command);\n\t\tret = run_init_process(ramdisk_execute_command);\n\t\tpr_err("munch_kinit: after run_init_process ramdisk=%s ret=%d\\n", ramdisk_execute_command, ret);',
+              ),
+          ]
+          for old, new in replacements:
+              if old not in s:
+                  raise SystemExit(f"missing kernel_init marker pattern: {old!r}")
+              s = s.replace(old, new, 1)
+          p.write_text(s)
+          PY
+          grep -nE 'munch_debug|munch_kinit' init/main.c
           echo "[Add async progress markers]"
           python3 - <<'PY'
           from pathlib import Path
