@@ -1,0 +1,93 @@
+name: Publish Munch v3.2 Legacy Artifact
+run-name: Publish munch v3.2 legacy artifact
+on:
+  push:
+    paths:
+      - ".github/workflows/publish_munch_v320_artifact.yml"
+  workflow_dispatch:
+    inputs:
+      source_run_id:
+        description: Source Actions run id
+        required: true
+        default: "27750948541"
+        type: string
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish_artifact:
+    runs-on: ubuntu-22.04
+    env:
+      DEFAULT_SOURCE_RUN_ID: "27750948541"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Download and publish kernel image
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DISPATCH_SOURCE_RUN_ID: ${{ github.event.inputs.source_run_id }}
+        run: |
+          set -euxo pipefail
+          SOURCE_RUN_ID="${DISPATCH_SOURCE_RUN_ID:-$DEFAULT_SOURCE_RUN_ID}"
+          BRANCH="artifact-munch-v320-legacy-run-${SOURCE_RUN_ID}"
+          OUTDIR="munch-v320-legacy-run-${SOURCE_RUN_ID}"
+          PUBLISH_SRC="${RUNNER_TEMP}/${OUTDIR}"
+
+          curl -fsSL \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -o artifacts.json \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${SOURCE_RUN_ID}/artifacts"
+
+          python3 - <<'PY' > artifact_url.txt
+          import json
+          import sys
+
+          data = json.load(open("artifacts.json", encoding="utf-8"))
+          artifacts = [a for a in data.get("artifacts", []) if not a.get("expired")]
+          if not artifacts:
+              raise SystemExit("no non-expired artifacts found")
+
+          def score(artifact):
+              name = artifact.get("name", "")
+              return (
+                  "stable-next-image" in name,
+                  "v320" in name or "v3.2" in name,
+                  artifact.get("created_at", ""),
+              )
+
+          artifact = sorted(artifacts, key=score, reverse=True)[0]
+          print(artifact["archive_download_url"])
+          print(f"selected artifact: {artifact['name']}", file=sys.stderr)
+          PY
+
+          ARTIFACT_URL="$(cat artifact_url.txt)"
+          curl -fsSL \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -o artifact.zip \
+            "${ARTIFACT_URL}"
+
+          python3 -m zipfile -e artifact.zip output
+          test -s output/Image.gz-dtb
+
+          mkdir -p "$PUBLISH_SRC"
+          cp output/Image.gz-dtb "$PUBLISH_SRC/Image.gz-dtb"
+          if [ -f output/kernel.config ]; then cp output/kernel.config "$PUBLISH_SRC/kernel.config"; fi
+          if [ -f output/kernel-version.txt ]; then cp output/kernel-version.txt "$PUBLISH_SRC/kernel-version.txt"; fi
+          ( cd "$PUBLISH_SRC" && sha256sum * > SHA256SUMS )
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout --orphan "$BRANCH"
+          git rm -rf . || true
+          mkdir -p "$OUTDIR"
+          cp -r "${PUBLISH_SRC}/." "$OUTDIR/"
+          git add "$OUTDIR"
+          git commit -m "Publish munch v3.2 legacy artifact ${SOURCE_RUN_ID}"
+          git push -f origin "HEAD:${BRANCH}"
