@@ -1,0 +1,306 @@
+name: Build Munch FusionX KSU Next v3.2 Legacy Kernel
+run-name: Build munch FusionX KSU Next v3.2 legacy
+on:
+  workflow_dispatch:
+    inputs:
+      phonea:
+        description: Device codename
+        required: true
+        default: munch
+        type: string
+      roota:
+        description: Root mode
+        required: true
+        default: fusionx-ksunext-v320-legacy-skipfreeinit
+        type: string
+
+jobs:
+  build_job:
+    runs-on: ubuntu-22.04
+    env:
+      CCACHE_COMPILERCHECK: "%compiler% -dumpmachine; %compiler% -dumpversion"
+      CCACHE_NOHASHDIR: "true"
+      CCACHE_HARDLINK: "true"
+      CI: "false"
+    steps:
+      - name: Prepare toolchain
+        run: |
+          mkdir "$GITHUB_WORKSPACE/proton-clang"
+          cd "$GITHUB_WORKSPACE/proton-clang"
+          wget https://github.com/kdrag0n/proton-clang/archive/refs/tags/20210522.zip
+          unzip 20210522.zip
+          cd ..
+          sudo apt update
+          sudo apt install -y build-essential git curl wget bison flex zip bc cpio libssl-dev ccache python-is-python3 \
+            gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi binutils-aarch64-linux-gnu binutils-arm-linux-gnueabi
+
+      - name: Build kernel
+        run: |
+          set -euxo pipefail
+          mkdir "$GITHUB_WORKSPACE/kernel_workspace"
+          cd "$GITHUB_WORKSPACE/kernel_workspace"
+          git clone https://github.com/SenseiiX/fusionX_sm8250 -b stable-next --depth=1 --recurse-submodules --shallow-submodules android_kernel
+          cd android_kernel
+          git submodule update --init --recursive --depth=1
+
+          echo "[Checkout KernelSU-Next v3.2.0-legacy]"
+          git -C KernelSU-Next fetch --tags --force --unshallow || git -C KernelSU-Next fetch --tags --force --depth=4000
+          git -C KernelSU-Next checkout -f v3.2.0-legacy
+          KSU_GIT_COUNT="$(git -C KernelSU-Next rev-list --count HEAD)"
+          KSU_EXPECTED_VERSION="$((30000 + KSU_GIT_COUNT + 150))"
+          echo "KernelSU-Next tag: $(git -C KernelSU-Next describe --tags --abbrev=0)"
+          echo "KernelSU-Next commit count: ${KSU_GIT_COUNT}"
+          echo "KernelSU-Next expected version: ${KSU_EXPECTED_VERSION}"
+          test "${KSU_EXPECTED_VERSION}" = "33129"
+
+          echo "[Remove unsupported LLVM optimization flags for Proton clang 13]"
+          grep -nE 'regalloc-enable-advisor|enable-ml-inliner|fsplit-machine-functions' Makefile || true
+          sed -i -E '/regalloc-enable-advisor|enable-ml-inliner|fsplit-machine-functions/d' Makefile
+          ! grep -nE 'regalloc-enable-advisor|enable-ml-inliner|fsplit-machine-functions' Makefile
+
+          echo "[Patch FusionX manual hooks for KernelSU-Next v3.2.0-legacy]"
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def block(*lines):
+              return "\n".join(lines) + "\n"
+
+          def rw(path, func):
+              p = Path(path)
+              s = p.read_text()
+              ns = func(s)
+              if ns == s:
+                  raise SystemExit(f"no change for {path}")
+              p.write_text(ns)
+
+          def one(s, old, new, name):
+              if old not in s:
+                  raise SystemExit(f"missing {name}")
+              return s.replace(old, new, 1)
+
+          def patch_exec(s):
+              old = block(
+                  "static int do_execveat_common(int fd, struct filename *filename,",
+                  "\t\t\t      struct user_arg_ptr argv,",
+                  "\t\t\t      struct user_arg_ptr envp,",
+                  "\t\t\t      int flags)",
+                  "{",
+                  "\treturn __do_execve_file(fd, filename, argv, envp, flags, NULL);",
+                  "}",
+              )
+              new = block(
+                  "#ifdef CONFIG_KSU",
+                  "extern int ksu_handle_execveat(int *fd, struct filename **filename_ptr,",
+                  "\t\t\t       void *argv, void *envp, int *flags);",
+                  "#endif",
+                  "",
+                  "static int do_execveat_common(int fd, struct filename *filename,",
+                  "\t\t\t      struct user_arg_ptr argv,",
+                  "\t\t\t      struct user_arg_ptr envp,",
+                  "\t\t\t      int flags)",
+                  "{",
+                  "#ifdef CONFIG_KSU",
+                  "\tksu_handle_execveat(&fd, &filename, &argv, &envp, &flags);",
+                  "#endif",
+                  "\treturn __do_execve_file(fd, filename, argv, envp, flags, NULL);",
+                  "}",
+              )
+              s = one(s, old, new, "do_execveat_common hook")
+              s = s.replace(
+                  "#if defined(CONFIG_KSU) && !defined(CONFIG_KSU_KPROBES_HOOK)",
+                  "#if 0 /* old KernelSU syscall hook disabled for v3.2 legacy */ && defined(CONFIG_KSU) && !defined(CONFIG_KSU_KPROBES_HOOK)",
+              )
+              return s
+
+          def patch_read_write(s):
+              s = one(
+                  s,
+                  block(
+                      "extern bool ksu_vfs_read_hook __read_mostly;",
+                      "extern int ksu_handle_sys_read(unsigned int fd, char __user **buf_ptr,",
+                      "\t\t\tsize_t *count_ptr);",
+                  ),
+                  block(
+                      "extern bool ksu_vfs_read_hook __read_mostly;",
+                      "extern void ksu_handle_sys_read(unsigned int fd);",
+                  ),
+                  "read hook extern",
+              )
+              s = one(
+                  s,
+                  block(
+                      "\tif (unlikely(ksu_vfs_read_hook)) ",
+                      "\t\tksu_handle_sys_read(fd, &buf, &count);",
+                  ),
+                  block(
+                      "\tif (unlikely(ksu_vfs_read_hook))",
+                      "\t\tksu_handle_sys_read(fd);",
+                  ),
+                  "read hook call",
+              )
+              return s
+
+          def patch_open(s):
+              return s.replace(
+                  "extern __attribute__((hot, always_inline)) int ksu_handle_faccessat",
+                  "extern int ksu_handle_faccessat",
+              )
+
+          def patch_stat(s):
+              return s.replace(
+                  "extern __attribute__((hot, always_inline)) int ksu_handle_stat",
+                  "extern int ksu_handle_stat",
+              )
+
+          def patch_reboot(s):
+              old = block(
+                  "SYSCALL_DEFINE4(reboot, int, magic1, int, magic2, unsigned int, cmd,",
+                  "\t\tvoid __user *, arg)",
+                  "{",
+                  "\tstruct pid_namespace *pid_ns = task_active_pid_ns(current);",
+                  "\tchar buffer[256];",
+                  "\tint ret = 0;",
+              )
+              new = block(
+                  "#ifdef CONFIG_KSU",
+                  "extern int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd,",
+                  "\t\t\t\t\t void __user **arg);",
+                  "#endif",
+                  "",
+                  "SYSCALL_DEFINE4(reboot, int, magic1, int, magic2, unsigned int, cmd,",
+                  "\t\tvoid __user *, arg)",
+                  "{",
+                  "\tstruct pid_namespace *pid_ns = task_active_pid_ns(current);",
+                  "\tchar buffer[256];",
+                  "\tint ret = 0;",
+                  "#ifdef CONFIG_KSU",
+                  "\tksu_handle_sys_reboot(magic1, magic2, cmd, &arg);",
+                  "#endif",
+              )
+              return one(s, old, new, "reboot hook")
+
+          def patch_devpts(s):
+              old = block(
+                  "void *devpts_get_priv(struct dentry *dentry)",
+                  "{",
+                  "\tif (dentry->d_sb->s_magic != DEVPTS_SUPER_MAGIC)",
+              )
+              new = block(
+                  "#ifdef CONFIG_KSU",
+                  "extern int ksu_handle_devpts(struct inode *inode);",
+                  "#endif",
+                  "",
+                  "void *devpts_get_priv(struct dentry *dentry)",
+                  "{",
+                  "#ifdef CONFIG_KSU",
+                  "\tksu_handle_devpts(dentry->d_inode);",
+                  "#endif",
+                  "\tif (dentry->d_sb->s_magic != DEVPTS_SUPER_MAGIC)",
+              )
+              return one(s, old, new, "devpts hook")
+
+          def patch_init_main(s):
+              old = block(
+                  "\tftrace_free_init_mem();",
+                  "\tfree_initmem();",
+              )
+              new = block(
+                  "\tftrace_free_init_mem();",
+                  "\tpr_err(\"munch_kinit: skipping free_initmem before mark_readonly\\n\");",
+                  "\t/* free_initmem(); */",
+              )
+              return one(s, old, new, "skip free_initmem")
+
+          rw("fs/exec.c", patch_exec)
+          rw("fs/read_write.c", patch_read_write)
+          rw("fs/open.c", patch_open)
+          rw("fs/stat.c", patch_stat)
+          rw("kernel/reboot.c", patch_reboot)
+          rw("fs/devpts/inode.c", patch_devpts)
+          rw("init/main.c", patch_init_main)
+          PY
+
+          echo "[Manual hook verification]"
+          grep -n "ksu_handle_execveat(&fd" fs/exec.c
+          grep -n "ksu_handle_sys_read(fd);" fs/read_write.c
+          grep -n "ksu_handle_faccessat" fs/open.c
+          grep -n "ksu_handle_stat" fs/stat.c
+          grep -n "ksu_handle_sys_reboot" kernel/reboot.c
+          grep -n "ksu_handle_devpts" fs/devpts/inode.c
+          grep -n "skipping free_initmem" init/main.c
+
+          TOOLCHAIN="$GITHUB_WORKSPACE/proton-clang/proton-clang-20210522/bin"
+          ARM32_WRAP="$GITHUB_WORKSPACE/arm32-toolchain-wrapper"
+          mkdir -p "$ARM32_WRAP"
+          for tool in as ld objcopy elfedit gcc; do
+            ln -sf "/usr/bin/arm-linux-gnueabi-$tool" "$ARM32_WRAP/arm-linux-gnueabi-$tool"
+          done
+          ln -sf /usr/bin/arm-linux-gnueabi-as "$ARM32_WRAP/as"
+          ln -sf /usr/bin/arm-linux-gnueabi-ld "$ARM32_WRAP/ld"
+          export PATH="/usr/bin:$TOOLCHAIN:$PATH"
+          export ARCH=arm64
+          export SUBARCH=arm64
+          for tool in ld.lld llvm-ar llvm-nm llvm-objcopy llvm-objdump llvm-readelf llvm-strip; do
+            test -x "$TOOLCHAIN/$tool"
+          done
+          MAKE_ARGS="ARCH=arm64 SUBARCH=arm64 O=out CC=$TOOLCHAIN/clang LD=$TOOLCHAIN/ld.lld AR=$TOOLCHAIN/llvm-ar NM=$TOOLCHAIN/llvm-nm OBJCOPY=$TOOLCHAIN/llvm-objcopy OBJDUMP=$TOOLCHAIN/llvm-objdump READELF=$TOOLCHAIN/llvm-readelf STRIP=$TOOLCHAIN/llvm-strip CROSS_COMPILE=$TOOLCHAIN/aarch64-linux-gnu- CROSS_COMPILE_ARM32=$ARM32_WRAP/arm-linux-gnueabi- CROSS_COMPILE_COMPAT=$ARM32_WRAP/arm-linux-gnueabi- CLANG_TRIPLE=aarch64-linux-gnu-"
+
+          echo "[kernel version]"
+          grep -E '^(VERSION|PATCHLEVEL|SUBLEVEL|EXTRAVERSION) =' Makefile
+          echo "[clang version]"
+          "$TOOLCHAIN/clang" --version
+          echo "[KernelSU-Next tree]"
+          git -C KernelSU-Next describe --tags --abbrev=0
+          git -C KernelSU-Next rev-parse --short HEAD
+          ls -la KernelSU-Next/kernel drivers/kernelsu
+          test -f drivers/kernelsu/Kconfig
+          test -f drivers/kernelsu/Kbuild
+
+          make $MAKE_ARGS vendor/munch_defconfig
+          scripts/config --file out/.config \
+            -d MODULES \
+            -d KPROBES \
+            -d KRETPROBES \
+            -d KPROBE_EVENTS \
+            -d CFI_CLANG \
+            -d SHADOW_CALL_STACK \
+            -e SERIAL_MSM_GENI_CONSOLE \
+            --set-val LITTLE_CPU_MASK 15 \
+            --set-val BIG_CPU_MASK 112 \
+            --set-val PRIME_CPU_MASK 128 \
+            -e KSU \
+            -e KSU_MANUAL_HOOK \
+            -d KSU_KPROBES_HOOK \
+            -d KSU_DEBUG
+          make $MAKE_ARGS olddefconfig
+
+          echo '--- Final FusionX KSU Next v3.2 legacy config ---'
+          grep -E 'CONFIG_LOCALVERSION|CONFIG_MODULES|CONFIG_KPROBES|CONFIG_KRETPROBES|CONFIG_KPROBE_EVENTS|CONFIG_KSU|CONFIG_KSU_MANUAL_HOOK|CONFIG_KSU_KPROBES_HOOK|CONFIG_MODVERSIONS|CONFIG_MIHW|CONFIG_BUILD_ARM64|CONFIG_LITTLE_CPU_MASK|CONFIG_BIG_CPU_MASK|CONFIG_PRIME_CPU_MASK|CONFIG_LTO|CONFIG_LTO_CLANG|CONFIG_LTO_NONE|CONFIG_CFI_CLANG|CONFIG_SHADOW_CALL_STACK|CONFIG_SERIAL_MSM_GENI_CONSOLE' out/.config || true
+          grep -q '^CONFIG_LITTLE_CPU_MASK=15$' out/.config
+          grep -q '^CONFIG_BIG_CPU_MASK=112$' out/.config
+          grep -q '^CONFIG_PRIME_CPU_MASK=128$' out/.config
+          grep -q '^CONFIG_SERIAL_MSM_GENI_CONSOLE=y$' out/.config
+          grep -q '^# CONFIG_MODULES is not set$' out/.config
+          ! grep -q '^CONFIG_KPROBES=y$' out/.config
+          grep -q '^CONFIG_KSU=y$' out/.config
+          grep -q '^CONFIG_KSU_MANUAL_HOOK=y$' out/.config
+          ! grep -q '^CONFIG_KSU_KPROBES_HOOK=y$' out/.config
+          grep -q '^CONFIG_LTO_CLANG=y$' out/.config
+          grep -q '^CONFIG_LTO_CLANG_FULL=y$' out/.config
+
+          make $MAKE_ARGS -j"$(nproc)" Image.gz-dtb
+          ls -l out/arch/arm64/boot/Image out/arch/arm64/boot/Image.gz out/arch/arm64/boot/Image.gz-dtb || true
+
+          mkdir -p "$GITHUB_WORKSPACE/munch-fusionx-ksunext-v320-legacy-output"
+          cp out/arch/arm64/boot/Image.gz-dtb "$GITHUB_WORKSPACE/munch-fusionx-ksunext-v320-legacy-output/Image.gz-dtb"
+          cp out/arch/arm64/boot/Image "$GITHUB_WORKSPACE/munch-fusionx-ksunext-v320-legacy-output/Image.raw"
+          cp out/.config "$GITHUB_WORKSPACE/munch-fusionx-ksunext-v320-legacy-output/kernel.config"
+          sha256sum "$GITHUB_WORKSPACE/munch-fusionx-ksunext-v320-legacy-output/Image.gz-dtb" "$GITHUB_WORKSPACE/munch-fusionx-ksunext-v320-legacy-output/Image.raw" | tee "$GITHUB_WORKSPACE/munch-fusionx-ksunext-v320-legacy-output/SHA256SUMS"
+          strings "$GITHUB_WORKSPACE/munch-fusionx-ksunext-v320-legacy-output/Image.raw" | grep -m1 'Linux version' | tee "$GITHUB_WORKSPACE/munch-fusionx-ksunext-v320-legacy-output/kernel-version.txt" || true
+
+      - name: Upload KSU Next v3.2 legacy kernel image
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.phonea }}-${{ inputs.roota }}-stable-next-image
+          path: munch-fusionx-ksunext-v320-legacy-output/*
+          retention-days: 3
