@@ -1,6 +1,9 @@
 name: Build Munch FusionX KSU Next v3.2 Legacy Kernel
 run-name: Build munch FusionX KSU Next v3.2 legacy
 on:
+  push:
+    paths:
+      - ".github/workflows/build_munch_fusionx_ksunext_v320_legacy.yml"
   workflow_dispatch:
     inputs:
       phonea:
