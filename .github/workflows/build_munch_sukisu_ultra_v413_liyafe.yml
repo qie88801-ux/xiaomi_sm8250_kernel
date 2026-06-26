@@ -51,6 +51,9 @@ jobs:
       - name: Build MIUI kernel with official SukiSU Ultra
         run: |
           set -euxo pipefail
+          mkdir -p "$GITHUB_WORKSPACE/sukisu-output"
+          exec > >(tee "$GITHUB_WORKSPACE/sukisu-output/build-step.log") 2>&1
+
           mkdir -p "$GITHUB_WORKSPACE/kernel_workspace"
           cd "$GITHUB_WORKSPACE/kernel_workspace"
 
@@ -76,25 +79,38 @@ jobs:
           git -C KernelSU describe --tags --always
 
           # Disable legacy in-tree KernelSU hook blocks when this kernel source has them.
+          patch_perl() {
+            local target="$1"
+            shift
+            if [ -f "$target" ]; then
+              echo "[patch] $target"
+              perl -0pi -e "$1" "$target"
+            else
+              echo "[skip missing] $target"
+            fi
+          }
+
           if grep -q "ksu_vfs_read_hook" fs/read_write.c 2>/dev/null; then
-            perl -0pi -e "s@#ifdef CONFIG_KSU@#if 0 /* disabled legacy KernelSU hook */@g" fs/read_write.c fs/exec.c drivers/input/input.c drivers/tty/pty.c
+            for legacy_hook_file in fs/read_write.c fs/exec.c drivers/input/input.c drivers/tty/pty.c; do
+              patch_perl "$legacy_hook_file" "s@#ifdef CONFIG_KSU@#if 0 /* disabled legacy KernelSU hook */@g"
+            done
           fi
 
           # Compatibility shims for official SukiSU Ultra v4.1.3 on Xiaomi 4.19 trees.
           find -L drivers/kernelsu -name "*.c" -type f -exec sed -i "s/access_ok(/access_ok(VERIFY_READ, /g" {} +
-          perl -0pi -e 's@#include <linux/pgtable.h>@#include <asm/pgtable.h>@g; s@#include <linux/uaccess.h>\n@#include <linux/uaccess.h>\n#ifndef strncpy_from_user_nofault\n#define strncpy_from_user_nofault strncpy_from_user\n#endif\n@g' drivers/kernelsu/feature/sucompat.c
-          perl -0pi -e 's@#include "linux/uaccess.h"\n@#include "linux/uaccess.h"\n#ifndef copy_to_kernel_nofault\n#define copy_to_kernel_nofault probe_kernel_write\n#endif\n@g' drivers/kernelsu/hook/arm64/patch_memory.c
-          perl -0pi -e 's@#include <linux/mount.h>\n@#include <linux/mount.h>\n#ifndef security_inode_init_security_anon\n#define security_inode_init_security_anon(inode, qname, context_inode) ((void)(inode), (void)(qname), (void)(context_inode), 0)\n#endif\n#ifndef selinux_inode\n#define selinux_inode(inode) ((struct inode_security_struct *)((inode)->i_security))\n#endif\n@g; s@#if LINUX_VERSION_CODE >= KERNEL_VERSION\(6, 1, 0\)\nstatic int ksu_wrapper_iopoll.*?#endif\n\n@@s; s@// no REMAP_FILE_DEDUP: use file_in.*?static int ksu_wrapper_fadvise@static int ksu_wrapper_fadvise@s; s@^    p->ops\.iopoll = .*\n@@m; s@^    p->ops\.remap_file_range = .*\n@@m' drivers/kernelsu/infra/file_wrapper.c
-          perl -0pi -e 's@#include <linux/seccomp.h>\n@#include <linux/seccomp.h>\n#include <asm/unistd.h>\n#ifndef SECCOMP_ARCH_NATIVE_NR\n#define SECCOMP_ARCH_NATIVE_NR __NR_syscalls\n#endif\n@g' drivers/kernelsu/infra/seccomp_cache.c
-          perl -0pi -e 's@#include <uapi/linux/mount.h>@#include <uapi/linux/fs.h>\n#include <asm/uaccess.h>@g; s@extern int path_mount\(.*?\);\n\n@@s; s@    // make root mount private\n    struct path root_path;\n    get_fs_root\(current->fs, &root_path\);\n    int pm_ret = path_mount\(NULL, &root_path, NULL, MS_PRIVATE \| MS_REC, NULL\);\n    path_put\(&root_path\);@    // make root mount private\n    mm_segment_t old_fs = get_fs();\n    set_fs(KERNEL_DS);\n    int pm_ret = ksys_mount(NULL, "/", NULL, MS_PRIVATE | MS_REC, NULL);\n    set_fs(old_fs);@s' drivers/kernelsu/infra/su_mount_ns.c
-          perl -0pi -e 's@#include <linux/version.h>\n@#include <linux/version.h>\n#include <linux/string.h>\n@g; s@static const struct fsnotify_ops ksu_ops = \{\n    \.handle_inode_event = ksu_handle_inode_event,\n\};@static int ksu_handle_event(struct fsnotify_group *group, struct inode *inode, u32 mask, const void *data,\n                            int data_type, const unsigned char *file_name, u32 cookie,\n                            struct fsnotify_iter_info *iter_info)\n{\n    struct qstr qname;\n\n    (void)group;\n    (void)data;\n    (void)data_type;\n    (void)iter_info;\n\n    if (!file_name)\n        return 0;\n\n    qname.name = file_name;\n    qname.len = strlen(file_name);\n    qname.hash = 0;\n    return ksu_handle_inode_event(NULL, mask, inode, NULL, &qname, cookie);\n}\n\nstatic const struct fsnotify_ops ksu_ops = {\n    .handle_event = ksu_handle_event,\n};@g' drivers/kernelsu/manager/pkg_observer.c
-          perl -0pi -e 's@#include <linux/task_work.h>\n@#include <linux/task_work.h>\n#include <linux/sched/task.h>\n#ifndef TWA_RESUME\n#define TWA_RESUME 1\n#endif\n#ifndef fallthrough\n#define fallthrough do {} while (0)\n#endif\n@g' drivers/kernelsu/policy/allowlist.c
-          perl -0pi -e 's@void seccomp_filter_release\(struct task_struct \*tsk\);\n@@g; s@\n    atomic_set\(&current->seccomp\.filter_count, 0\);@@g; s@seccomp_filter_release\(fake\);@put_seccomp_filter(fake);@g' drivers/kernelsu/policy/app_profile.c
-          perl -0pi -e 's@#include <linux/uaccess.h>\n@#include <linux/uaccess.h>\n#ifndef strncpy_from_user_nofault\n#define strncpy_from_user_nofault strncpy_from_user\n#endif\n#ifndef copy_from_user_nofault\n#define copy_from_user_nofault copy_from_user\n#endif\n#ifndef copy_to_user_nofault\n#define copy_to_user_nofault copy_to_user\n#endif\n@g' drivers/kernelsu/runtime/ksud_integration.c
-          perl -0pi -e 's@#include "objsec.h"\n@#include "objsec.h"\n#ifndef selinux_cred\n#define selinux_cred(cred) ((struct task_security_struct *)((cred)->security))\n#endif\n@g' drivers/kernelsu/selinux/selinux.c
-          perl -0pi -e 's@#include <linux/minmax.h>@#include <linux/kernel.h>@g; s@#include <linux/uaccess.h>\n@#include <linux/uaccess.h>\n#ifndef strncpy_from_user_nofault\n#define strncpy_from_user_nofault strncpy_from_user\n#endif\n@g' drivers/kernelsu/sulog/event.c
-          perl -0pi -e 's@#include <linux/thread_info.h>\n@#include <linux/thread_info.h>\n#include <linux/sched/task.h>\n#include <linux/sched/signal.h>\n@g' drivers/kernelsu/supercall/dispatch.c
-          perl -0pi -e 's@#include <linux/task_work.h>\n@#include <linux/task_work.h>\n#ifndef TWA_RESUME\n#define TWA_RESUME 1\n#endif\n@g' drivers/kernelsu/supercall/supercall.c
+          patch_perl drivers/kernelsu/feature/sucompat.c 's@#include <linux/pgtable.h>@#include <asm/pgtable.h>@g; s@#include <linux/uaccess.h>\n@#include <linux/uaccess.h>\n#ifndef strncpy_from_user_nofault\n#define strncpy_from_user_nofault strncpy_from_user\n#endif\n@g'
+          patch_perl drivers/kernelsu/hook/arm64/patch_memory.c 's@#include "linux/uaccess.h"\n@#include "linux/uaccess.h"\n#ifndef copy_to_kernel_nofault\n#define copy_to_kernel_nofault probe_kernel_write\n#endif\n@g'
+          patch_perl drivers/kernelsu/infra/file_wrapper.c 's@#include <linux/mount.h>\n@#include <linux/mount.h>\n#ifndef security_inode_init_security_anon\n#define security_inode_init_security_anon(inode, qname, context_inode) ((void)(inode), (void)(qname), (void)(context_inode), 0)\n#endif\n#ifndef selinux_inode\n#define selinux_inode(inode) ((struct inode_security_struct *)((inode)->i_security))\n#endif\n@g; s@#if LINUX_VERSION_CODE >= KERNEL_VERSION\(6, 1, 0\)\nstatic int ksu_wrapper_iopoll.*?#endif\n\n@@s; s@// no REMAP_FILE_DEDUP: use file_in.*?static int ksu_wrapper_fadvise@static int ksu_wrapper_fadvise@s; s@^    p->ops\.iopoll = .*\n@@m; s@^    p->ops\.remap_file_range = .*\n@@m'
+          patch_perl drivers/kernelsu/infra/seccomp_cache.c 's@#include <linux/seccomp.h>\n@#include <linux/seccomp.h>\n#include <asm/unistd.h>\n#ifndef SECCOMP_ARCH_NATIVE_NR\n#define SECCOMP_ARCH_NATIVE_NR __NR_syscalls\n#endif\n@g'
+          patch_perl drivers/kernelsu/infra/su_mount_ns.c 's@#include <uapi/linux/mount.h>@#include <uapi/linux/fs.h>\n#include <asm/uaccess.h>@g; s@extern int path_mount\(.*?\);\n\n@@s; s@    // make root mount private\n    struct path root_path;\n    get_fs_root\(current->fs, &root_path\);\n    int pm_ret = path_mount\(NULL, &root_path, NULL, MS_PRIVATE \| MS_REC, NULL\);\n    path_put\(&root_path\);@    // make root mount private\n    mm_segment_t old_fs = get_fs();\n    set_fs(KERNEL_DS);\n    int pm_ret = ksys_mount(NULL, "/", NULL, MS_PRIVATE | MS_REC, NULL);\n    set_fs(old_fs);@s'
+          patch_perl drivers/kernelsu/manager/pkg_observer.c 's@#include <linux/version.h>\n@#include <linux/version.h>\n#include <linux/string.h>\n@g; s@static const struct fsnotify_ops ksu_ops = \{\n    \.handle_inode_event = ksu_handle_inode_event,\n\};@static int ksu_handle_event(struct fsnotify_group *group, struct inode *inode, u32 mask, const void *data,\n                            int data_type, const unsigned char *file_name, u32 cookie,\n                            struct fsnotify_iter_info *iter_info)\n{\n    struct qstr qname;\n\n    (void)group;\n    (void)data;\n    (void)data_type;\n    (void)iter_info;\n\n    if (!file_name)\n        return 0;\n\n    qname.name = file_name;\n    qname.len = strlen(file_name);\n    qname.hash = 0;\n    return ksu_handle_inode_event(NULL, mask, inode, NULL, &qname, cookie);\n}\n\nstatic const struct fsnotify_ops ksu_ops = {\n    .handle_event = ksu_handle_event,\n};@g'
+          patch_perl drivers/kernelsu/policy/allowlist.c 's@#include <linux/task_work.h>\n@#include <linux/task_work.h>\n#include <linux/sched/task.h>\n#ifndef TWA_RESUME\n#define TWA_RESUME 1\n#endif\n#ifndef fallthrough\n#define fallthrough do {} while (0)\n#endif\n@g'
+          patch_perl drivers/kernelsu/policy/app_profile.c 's@void seccomp_filter_release\(struct task_struct \*tsk\);\n@@g; s@\n    atomic_set\(&current->seccomp\.filter_count, 0\);@@g; s@seccomp_filter_release\(fake\);@put_seccomp_filter(fake);@g'
+          patch_perl drivers/kernelsu/runtime/ksud_integration.c 's@#include <linux/uaccess.h>\n@#include <linux/uaccess.h>\n#ifndef strncpy_from_user_nofault\n#define strncpy_from_user_nofault strncpy_from_user\n#endif\n#ifndef copy_from_user_nofault\n#define copy_from_user_nofault copy_from_user\n#endif\n#ifndef copy_to_user_nofault\n#define copy_to_user_nofault copy_to_user\n#endif\n@g'
+          patch_perl drivers/kernelsu/selinux/selinux.c 's@#include "objsec.h"\n@#include "objsec.h"\n#ifndef selinux_cred\n#define selinux_cred(cred) ((struct task_security_struct *)((cred)->security))\n#endif\n@g'
+          patch_perl drivers/kernelsu/sulog/event.c 's@#include <linux/minmax.h>@#include <linux/kernel.h>@g; s@#include <linux/uaccess.h>\n@#include <linux/uaccess.h>\n#ifndef strncpy_from_user_nofault\n#define strncpy_from_user_nofault strncpy_from_user\n#endif\n@g'
+          patch_perl drivers/kernelsu/supercall/dispatch.c 's@#include <linux/thread_info.h>\n@#include <linux/thread_info.h>\n#include <linux/sched/task.h>\n#include <linux/sched/signal.h>\n@g'
+          patch_perl drivers/kernelsu/supercall/supercall.c 's@#include <linux/task_work.h>\n@#include <linux/task_work.h>\n#ifndef TWA_RESUME\n#define TWA_RESUME 1\n#endif\n@g'
 
           cat > drivers/kernelsu/selinux/rules.c <<'EOF'
           #include <linux/errno.h>
@@ -265,7 +281,6 @@ jobs:
           cp out/arch/arm64/boot/Image anykernel/kernels/Image
           cp out/arch/arm64/boot/dtb anykernel/kernels/dtb
 
-          mkdir -p "$GITHUB_WORKSPACE/sukisu-output"
           cp out/arch/arm64/boot/Image "$GITHUB_WORKSPACE/sukisu-output/Image"
           cp out/arch/arm64/boot/dtb "$GITHUB_WORKSPACE/sukisu-output/dtb"
           cp out/.config "$GITHUB_WORKSPACE/sukisu-output/kernel.config"
@@ -295,6 +310,7 @@ jobs:
           sha256sum "$GITHUB_WORKSPACE"/sukisu-output/* | tee "$GITHUB_WORKSPACE/sukisu-output/SHA256SUMS"
 
       - name: Upload artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: munch-sukisu-ultra-v413-miui
@@ -302,12 +318,17 @@ jobs:
           retention-days: 7
 
       - name: Publish output branch
+        if: always()
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euxo pipefail
           OUT_BRANCH="artifact-munch-sukisu-ultra-v413-${GITHUB_RUN_ID}"
           OUT_DIR="munch-sukisu-ultra-v413-${GITHUB_RUN_ID}"
+          if [ ! -d sukisu-output ]; then
+            mkdir -p sukisu-output
+            echo "sukisu-output was not created before failure" > sukisu-output/build-step.log
+          fi
           mkdir -p publish-repo "$OUT_DIR"
           cp -a sukisu-output/. "$OUT_DIR/"
           cd publish-repo
