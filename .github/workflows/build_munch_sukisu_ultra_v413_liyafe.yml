@@ -1,0 +1,323 @@
+name: Build Munch SukiSU Ultra v4.1.3
+run-name: Build munch MIUI SukiSU Ultra v4.1.3
+
+on:
+  push:
+    paths:
+      - ".github/workflows/build_munch_sukisu_ultra_v413_liyafe.yml"
+  workflow_dispatch:
+    inputs:
+      phonea:
+        description: Device codename
+        required: true
+        default: munch
+        type: string
+      roota:
+        description: Root label
+        required: true
+        default: sukisu-ultra-v4.1.3
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build_job:
+    runs-on: ubuntu-22.04
+    env:
+      CI: "false"
+      CCACHE_COMPILERCHECK: "%compiler% -dumpmachine; %compiler% -dumpversion"
+      CCACHE_NOHASHDIR: "true"
+      CCACHE_HARDLINK: "true"
+      SUKISU_REF: "v4.1.3"
+      SUKISU_COMMIT: "0ca744a88835144c58d8256ebb32c279edabfcde"
+      KERNEL_REPO: "https://github.com/liyafe1997/kernel_xiaomi_sm8250_mod"
+      KERNEL_BRANCH: "android15-lineage22-mod"
+      ANYKERNEL_REPO: "https://github.com/liyafe1997/AnyKernel3"
+      ANYKERNEL_BRANCH: "kona"
+
+    steps:
+      - name: Prepare toolchain
+        run: |
+          set -euxo pipefail
+          mkdir -p "$GITHUB_WORKSPACE/proton-clang"
+          cd "$GITHUB_WORKSPACE/proton-clang"
+          wget -q https://github.com/kdrag0n/proton-clang/archive/refs/tags/20210522.zip
+          unzip -q 20210522.zip
+          sudo apt update
+          sudo apt install -y build-essential git curl wget bison flex zip bc cpio libssl-dev ccache python-is-python3 \
+            gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi binutils-aarch64-linux-gnu binutils-arm-linux-gnueabi
+
+      - name: Build MIUI kernel with official SukiSU Ultra
+        run: |
+          set -euxo pipefail
+          mkdir -p "$GITHUB_WORKSPACE/kernel_workspace"
+          cd "$GITHUB_WORKSPACE/kernel_workspace"
+
+          git clone "$KERNEL_REPO" -b "$KERNEL_BRANCH" --depth=1 android_kernel
+          cd android_kernel
+
+          TOOLCHAIN="$GITHUB_WORKSPACE/proton-clang/proton-clang-20210522/bin"
+          export PATH="/usr/lib/ccache:/usr/bin:$TOOLCHAIN:$PATH"
+          export ARCH=arm64
+          export SUBARCH=arm64
+          export CCACHE_DIR="$HOME/.cache/ccache_munch_sukisu_v413"
+
+          MAKE_ARGS="ARCH=arm64 SUBARCH=arm64 O=out CC=$TOOLCHAIN/clang CROSS_COMPILE=$TOOLCHAIN/aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- CLANG_TRIPLE=aarch64-linux-gnu-"
+
+          echo "[kernel source]"
+          git rev-parse HEAD
+          grep -E '^(VERSION|PATCHLEVEL|SUBLEVEL|EXTRAVERSION) =' Makefile
+          echo "[clang]"
+          "$TOOLCHAIN/clang" --version
+
+          curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s "$SUKISU_REF"
+          test "$(git -C KernelSU rev-parse HEAD)" = "$SUKISU_COMMIT"
+          git -C KernelSU describe --tags --always
+
+          # Disable legacy in-tree KernelSU hook blocks when this kernel source has them.
+          if grep -q "ksu_vfs_read_hook" fs/read_write.c 2>/dev/null; then
+            perl -0pi -e "s@#ifdef CONFIG_KSU@#if 0 /* disabled legacy KernelSU hook */@g" fs/read_write.c fs/exec.c drivers/input/input.c drivers/tty/pty.c
+          fi
+
+          # Compatibility shims for official SukiSU Ultra v4.1.3 on Xiaomi 4.19 trees.
+          find -L drivers/kernelsu -name "*.c" -type f -exec sed -i "s/access_ok(/access_ok(VERIFY_READ, /g" {} +
+          perl -0pi -e 's@#include <linux/pgtable.h>@#include <asm/pgtable.h>@g; s@#include <linux/uaccess.h>\n@#include <linux/uaccess.h>\n#ifndef strncpy_from_user_nofault\n#define strncpy_from_user_nofault strncpy_from_user\n#endif\n@g' drivers/kernelsu/feature/sucompat.c
+          perl -0pi -e 's@#include "linux/uaccess.h"\n@#include "linux/uaccess.h"\n#ifndef copy_to_kernel_nofault\n#define copy_to_kernel_nofault probe_kernel_write\n#endif\n@g' drivers/kernelsu/hook/arm64/patch_memory.c
+          perl -0pi -e 's@#include <linux/mount.h>\n@#include <linux/mount.h>\n#ifndef security_inode_init_security_anon\n#define security_inode_init_security_anon(inode, qname, context_inode) ((void)(inode), (void)(qname), (void)(context_inode), 0)\n#endif\n#ifndef selinux_inode\n#define selinux_inode(inode) ((struct inode_security_struct *)((inode)->i_security))\n#endif\n@g; s@#if LINUX_VERSION_CODE >= KERNEL_VERSION\(6, 1, 0\)\nstatic int ksu_wrapper_iopoll.*?#endif\n\n@@s; s@// no REMAP_FILE_DEDUP: use file_in.*?static int ksu_wrapper_fadvise@static int ksu_wrapper_fadvise@s; s@^    p->ops\.iopoll = .*\n@@m; s@^    p->ops\.remap_file_range = .*\n@@m' drivers/kernelsu/infra/file_wrapper.c
+          perl -0pi -e 's@#include <linux/seccomp.h>\n@#include <linux/seccomp.h>\n#include <asm/unistd.h>\n#ifndef SECCOMP_ARCH_NATIVE_NR\n#define SECCOMP_ARCH_NATIVE_NR __NR_syscalls\n#endif\n@g' drivers/kernelsu/infra/seccomp_cache.c
+          perl -0pi -e 's@#include <uapi/linux/mount.h>@#include <uapi/linux/fs.h>\n#include <asm/uaccess.h>@g; s@extern int path_mount\(.*?\);\n\n@@s; s@    // make root mount private\n    struct path root_path;\n    get_fs_root\(current->fs, &root_path\);\n    int pm_ret = path_mount\(NULL, &root_path, NULL, MS_PRIVATE \| MS_REC, NULL\);\n    path_put\(&root_path\);@    // make root mount private\n    mm_segment_t old_fs = get_fs();\n    set_fs(KERNEL_DS);\n    int pm_ret = ksys_mount(NULL, "/", NULL, MS_PRIVATE | MS_REC, NULL);\n    set_fs(old_fs);@s' drivers/kernelsu/infra/su_mount_ns.c
+          perl -0pi -e 's@#include <linux/version.h>\n@#include <linux/version.h>\n#include <linux/string.h>\n@g; s@static const struct fsnotify_ops ksu_ops = \{\n    \.handle_inode_event = ksu_handle_inode_event,\n\};@static int ksu_handle_event(struct fsnotify_group *group, struct inode *inode, u32 mask, const void *data,\n                            int data_type, const unsigned char *file_name, u32 cookie,\n                            struct fsnotify_iter_info *iter_info)\n{\n    struct qstr qname;\n\n    (void)group;\n    (void)data;\n    (void)data_type;\n    (void)iter_info;\n\n    if (!file_name)\n        return 0;\n\n    qname.name = file_name;\n    qname.len = strlen(file_name);\n    qname.hash = 0;\n    return ksu_handle_inode_event(NULL, mask, inode, NULL, &qname, cookie);\n}\n\nstatic const struct fsnotify_ops ksu_ops = {\n    .handle_event = ksu_handle_event,\n};@g' drivers/kernelsu/manager/pkg_observer.c
+          perl -0pi -e 's@#include <linux/task_work.h>\n@#include <linux/task_work.h>\n#include <linux/sched/task.h>\n#ifndef TWA_RESUME\n#define TWA_RESUME 1\n#endif\n#ifndef fallthrough\n#define fallthrough do {} while (0)\n#endif\n@g' drivers/kernelsu/policy/allowlist.c
+          perl -0pi -e 's@void seccomp_filter_release\(struct task_struct \*tsk\);\n@@g; s@\n    atomic_set\(&current->seccomp\.filter_count, 0\);@@g; s@seccomp_filter_release\(fake\);@put_seccomp_filter(fake);@g' drivers/kernelsu/policy/app_profile.c
+          perl -0pi -e 's@#include <linux/uaccess.h>\n@#include <linux/uaccess.h>\n#ifndef strncpy_from_user_nofault\n#define strncpy_from_user_nofault strncpy_from_user\n#endif\n#ifndef copy_from_user_nofault\n#define copy_from_user_nofault copy_from_user\n#endif\n#ifndef copy_to_user_nofault\n#define copy_to_user_nofault copy_to_user\n#endif\n@g' drivers/kernelsu/runtime/ksud_integration.c
+          perl -0pi -e 's@#include "objsec.h"\n@#include "objsec.h"\n#ifndef selinux_cred\n#define selinux_cred(cred) ((struct task_security_struct *)((cred)->security))\n#endif\n@g' drivers/kernelsu/selinux/selinux.c
+          perl -0pi -e 's@#include <linux/minmax.h>@#include <linux/kernel.h>@g; s@#include <linux/uaccess.h>\n@#include <linux/uaccess.h>\n#ifndef strncpy_from_user_nofault\n#define strncpy_from_user_nofault strncpy_from_user\n#endif\n@g' drivers/kernelsu/sulog/event.c
+          perl -0pi -e 's@#include <linux/thread_info.h>\n@#include <linux/thread_info.h>\n#include <linux/sched/task.h>\n#include <linux/sched/signal.h>\n@g' drivers/kernelsu/supercall/dispatch.c
+          perl -0pi -e 's@#include <linux/task_work.h>\n@#include <linux/task_work.h>\n#ifndef TWA_RESUME\n#define TWA_RESUME 1\n#endif\n@g' drivers/kernelsu/supercall/supercall.c
+
+          cat > drivers/kernelsu/selinux/rules.c <<'EOF'
+          #include <linux/errno.h>
+          #include <linux/printk.h>
+          #include <linux/types.h>
+          #include <linux/uaccess.h>
+          #include "selinux.h"
+
+          struct selinux_policy *backup_sepolicy;
+
+          void apply_kernelsu_rules(void)
+          {
+              pr_info("KernelSU: dynamic SELinux rules disabled on this 4.19 build\n");
+          }
+
+          int handle_sepolicy(void __user *user_data, u64 data_len)
+          {
+              (void)user_data;
+              (void)data_len;
+              return -EOPNOTSUPP;
+          }
+          EOF
+
+          cat > drivers/kernelsu/selinux/sepolicy.c <<'EOF'
+          #include <linux/err.h>
+          #include <linux/errno.h>
+          #include "sepolicy.h"
+
+          struct selinux_policy *ksu_dup_sepolicy(struct selinux_policy *old_pol) { (void)old_pol; return ERR_PTR(-EOPNOTSUPP); }
+          void ksu_destroy_sepolicy(struct selinux_policy *orig) { (void)orig; }
+          bool ksu_type(struct policydb *db, const char *name, const char *attr) { (void)db; (void)name; (void)attr; return false; }
+          bool ksu_attribute(struct policydb *db, const char *name) { (void)db; (void)name; return false; }
+          bool ksu_permissive(struct policydb *db, const char *type) { (void)db; (void)type; return false; }
+          bool ksu_enforce(struct policydb *db, const char *type) { (void)db; (void)type; return false; }
+          bool ksu_typeattribute(struct policydb *db, const char *type, const char *attr) { (void)db; (void)type; (void)attr; return false; }
+          bool ksu_exists(struct policydb *db, const char *type) { (void)db; (void)type; return false; }
+          bool ksu_allow(struct policydb *db, const char *src, const char *tgt, const char *cls, const char *perm) { (void)db; (void)src; (void)tgt; (void)cls; (void)perm; return false; }
+          bool ksu_deny(struct policydb *db, const char *src, const char *tgt, const char *cls, const char *perm) { (void)db; (void)src; (void)tgt; (void)cls; (void)perm; return false; }
+          bool ksu_auditallow(struct policydb *db, const char *src, const char *tgt, const char *cls, const char *perm) { (void)db; (void)src; (void)tgt; (void)cls; (void)perm; return false; }
+          bool ksu_dontaudit(struct policydb *db, const char *src, const char *tgt, const char *cls, const char *perm) { (void)db; (void)src; (void)tgt; (void)cls; (void)perm; return false; }
+          bool ksu_allowxperm(struct policydb *db, const char *src, const char *tgt, const char *cls, const char *range) { (void)db; (void)src; (void)tgt; (void)cls; (void)range; return false; }
+          bool ksu_auditallowxperm(struct policydb *db, const char *src, const char *tgt, const char *cls, const char *range) { (void)db; (void)src; (void)tgt; (void)cls; (void)range; return false; }
+          bool ksu_dontauditxperm(struct policydb *db, const char *src, const char *tgt, const char *cls, const char *range) { (void)db; (void)src; (void)tgt; (void)cls; (void)range; return false; }
+          bool ksu_type_transition(struct policydb *db, const char *src, const char *tgt, const char *cls, const char *def, const char *obj) { (void)db; (void)src; (void)tgt; (void)cls; (void)def; (void)obj; return false; }
+          bool ksu_type_change(struct policydb *db, const char *src, const char *tgt, const char *cls, const char *def) { (void)db; (void)src; (void)tgt; (void)cls; (void)def; return false; }
+          bool ksu_type_member(struct policydb *db, const char *src, const char *tgt, const char *cls, const char *def) { (void)db; (void)src; (void)tgt; (void)cls; (void)def; return false; }
+          bool ksu_genfscon(struct policydb *db, const char *fs_name, const char *path, const char *ctx) { (void)db; (void)fs_name; (void)path; (void)ctx; return false; }
+          EOF
+
+          cat > drivers/kernelsu/feature/selinux_hide.c <<'EOF'
+          #include <linux/init.h>
+          #include <linux/printk.h>
+          #include "selinux_hide.h"
+
+          void __init ksu_selinux_hide_init(void)
+          {
+              pr_info("selinux_hide: disabled on this 4.19 build\n");
+          }
+
+          void __exit ksu_selinux_hide_exit(void) {}
+          void ksu_selinux_hide_drop_backup_if_unused(void) {}
+          void ksu_selinux_hide_handle_second_stage(void) {}
+          void ksu_selinux_hide_handle_post_fs_data(void) {}
+          EOF
+
+          cat > drivers/kernelsu/feature/kernel_umount.c <<'EOF'
+          #include <linux/init.h>
+          #include <linux/printk.h>
+          #include "kernel_umount.h"
+
+          int ksu_handle_umount(uid_t old_uid, uid_t new_uid)
+          {
+              (void)old_uid;
+              (void)new_uid;
+              return 0;
+          }
+
+          void __init ksu_kernel_umount_init(void)
+          {
+              pr_info("kernel_umount: disabled on this 4.19 build\n");
+          }
+
+          void __exit ksu_kernel_umount_exit(void) {}
+          EOF
+
+          tmp_ksu_init=$(mktemp)
+          printf "#ifndef MODULE_IMPORT_NS\n#define MODULE_IMPORT_NS(ns)\n#endif\n" > "$tmp_ksu_init"
+          cat drivers/kernelsu/core/init.c >> "$tmp_ksu_init"
+          mv "$tmp_ksu_init" drivers/kernelsu/core/init.c
+
+          git clone "$ANYKERNEL_REPO" -b "$ANYKERNEL_BRANCH" --single-branch --depth=1 anykernel
+          sed -i '/device.name5=lmi/a device.name6=munch' anykernel/anykernel.sh
+
+          dts_source=arch/arm64/boot/dts/vendor/qcom
+          cp -a "$dts_source" .dts.bak
+          sed -i 's/<154>/<1537>/g' ${dts_source}/dsi-panel-j1s*
+          sed -i 's/<154>/<1537>/g' ${dts_source}/dsi-panel-j2*
+          sed -i 's/<155>/<1544>/g' ${dts_source}/dsi-panel-j3s-37-02-0a-dsc-video.dtsi
+          sed -i 's/<155>/<1545>/g' ${dts_source}/dsi-panel-j11-38-08-0a-fhd-cmd.dtsi
+          sed -i 's/<155>/<1546>/g' ${dts_source}/dsi-panel-k11a-38-08-0a-dsc-cmd.dtsi
+          sed -i 's/<155>/<1546>/g' ${dts_source}/dsi-panel-l11r-38-08-0a-dsc-cmd.dtsi
+          sed -i 's/<70>/<695>/g' ${dts_source}/dsi-panel-j11-38-08-0a-fhd-cmd.dtsi
+          sed -i 's/<70>/<695>/g' ${dts_source}/dsi-panel-j3s-37-02-0a-dsc-video.dtsi
+          sed -i 's/<70>/<695>/g' ${dts_source}/dsi-panel-k11a-38-08-0a-dsc-cmd.dtsi
+          sed -i 's/<70>/<695>/g' ${dts_source}/dsi-panel-l11r-38-08-0a-dsc-cmd.dtsi
+          sed -i 's/<71>/<710>/g' ${dts_source}/dsi-panel-j1s*
+          sed -i 's/<71>/<710>/g' ${dts_source}/dsi-panel-j2*
+          sed -i 's/\/\/ mi,mdss-dsi-pan-enable-smart-fps/mi,mdss-dsi-pan-enable-smart-fps/g' ${dts_source}/dsi-panel*
+          sed -i 's/\/\/ mi,mdss-dsi-smart-fps-max_framerate/mi,mdss-dsi-smart-fps-max_framerate/g' ${dts_source}/dsi-panel*
+          sed -i 's/\/\/ qcom,mdss-dsi-pan-enable-smart-fps/qcom,mdss-dsi-pan-enable-smart-fps/g' ${dts_source}/dsi-panel*
+          sed -i 's/qcom,mdss-dsi-qsync-min-refresh-rate/\/\/qcom,mdss-dsi-qsync-min-refresh-rate/g' ${dts_source}/dsi-panel*
+          sed -i 's/120 90 60/120 90 60 50 30/g' ${dts_source}/dsi-panel-g7a-36-02-0c-dsc-video.dtsi
+          sed -i 's/120 90 60/120 90 60 50 30/g' ${dts_source}/dsi-panel-g7a-37-02-0a-dsc-video.dtsi
+          sed -i 's/120 90 60/120 90 60 50 30/g' ${dts_source}/dsi-panel-g7a-37-02-0b-dsc-video.dtsi
+          sed -i 's/144 120 90 60/144 120 90 60 50 48 30/g' ${dts_source}/dsi-panel-j3s-37-02-0a-dsc-video.dtsi
+
+          make $MAKE_ARGS "${{ inputs.phonea }}_defconfig"
+          scripts/config --file out/.config \
+            -e KPROBES \
+            -e KRETPROBES \
+            -e KSU \
+            -e KSU_MANUAL_SU \
+            -d KPM \
+            -e KALLSYMS \
+            -e KALLSYMS_ALL \
+            --set-str STATIC_USERMODEHELPER_PATH /system/bin/micd \
+            -e PERF_CRITICAL_RT_TASK \
+            -e SF_BINDER \
+            -e OVERLAY_FS \
+            -d DEBUG_FS \
+            -e MIGT \
+            -e MIGT_ENERGY_MODEL \
+            -e MIHW \
+            -e PACKAGE_RUNTIME_INFO \
+            -e BINDER_OPT \
+            -e KPERFEVENTS \
+            -e MILLET \
+            -e PERF_HUMANTASK \
+            -d LTO_CLANG \
+            -d LOCALVERSION_AUTO \
+            -e XIAOMI_MIUI \
+            -d MI_MEMORY_SYSFS \
+            -e TASK_DELAY_ACCT \
+            -e MIUI_ZRAM_MEMORY_TRACKING \
+            -d CONFIG_MODULE_SIG_SHA512 \
+            -d CONFIG_MODULE_SIG_HASH \
+            -e MI_FRAGMENTION \
+            -e PERF_HELPER \
+            -e BOOTUP_RECLAIM \
+            -e MI_RECLAIM \
+            -e RTMM
+          make $MAKE_ARGS olddefconfig
+
+          echo "[final SukiSU config]"
+          grep -E 'CONFIG_KPROBES|CONFIG_KRETPROBES|CONFIG_KSU|CONFIG_KPM|CONFIG_KSU_SUSFS|CONFIG_KALLSYMS' out/.config || true
+          grep -q '^CONFIG_KSU=y' out/.config
+          ! grep -q '^CONFIG_KPM=y' out/.config
+          ! grep -q '^CONFIG_KSU_SUSFS=y' out/.config
+
+          make $MAKE_ARGS -j"$(nproc)"
+          test -f out/arch/arm64/boot/Image
+          find out/arch/arm64/boot/dts -name '*.dtb' -exec cat {} + > out/arch/arm64/boot/dtb
+          rm -rf "$dts_source"
+          mv .dts.bak "$dts_source"
+
+          rm -rf anykernel/kernels
+          mkdir -p anykernel/kernels
+          cp out/arch/arm64/boot/Image anykernel/kernels/Image
+          cp out/arch/arm64/boot/dtb anykernel/kernels/dtb
+
+          mkdir -p "$GITHUB_WORKSPACE/sukisu-output"
+          cp out/arch/arm64/boot/Image "$GITHUB_WORKSPACE/sukisu-output/Image"
+          cp out/arch/arm64/boot/dtb "$GITHUB_WORKSPACE/sukisu-output/dtb"
+          cp out/.config "$GITHUB_WORKSPACE/sukisu-output/kernel.config"
+
+          (
+            cd anykernel
+            ZIP_FILENAME="Kernel_MIUI_${{ inputs.phonea }}_SukiSU-Ultra-v4.1.3_$(date +'%Y%m%d_%H%M%S')_anykernel3_$(git rev-parse --short=8 HEAD).zip"
+            zip -r9 "$ZIP_FILENAME" ./* -x .git .gitignore out/ ./*.zip
+            mv "$ZIP_FILENAME" "$GITHUB_WORKSPACE/sukisu-output/"
+          )
+
+          {
+            echo "device=${{ inputs.phonea }}"
+            echo "rom=MIUI"
+            echo "root=SukiSU Ultra"
+            echo "sukisu_ref=${SUKISU_REF}"
+            echo "sukisu_commit=${SUKISU_COMMIT}"
+            echo "kernel_repo=${KERNEL_REPO}"
+            echo "kernel_branch=${KERNEL_BRANCH}"
+            echo "kernel_commit=$(git rev-parse HEAD)"
+            echo "anykernel_repo=${ANYKERNEL_REPO}"
+            echo "anykernel_branch=${ANYKERNEL_BRANCH}"
+            echo "anykernel_commit=$(git -C anykernel rev-parse HEAD)"
+            strings out/arch/arm64/boot/Image | grep -m1 'Linux version' || true
+          } | tee "$GITHUB_WORKSPACE/sukisu-output/build-info.txt"
+
+          sha256sum "$GITHUB_WORKSPACE"/sukisu-output/* | tee "$GITHUB_WORKSPACE/sukisu-output/SHA256SUMS"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: munch-sukisu-ultra-v413-miui
+          path: sukisu-output/*
+          retention-days: 7
+
+      - name: Publish output branch
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euxo pipefail
+          OUT_BRANCH="artifact-munch-sukisu-ultra-v413-${GITHUB_RUN_ID}"
+          OUT_DIR="munch-sukisu-ultra-v413-${GITHUB_RUN_ID}"
+          mkdir -p publish-repo "$OUT_DIR"
+          cp -a sukisu-output/. "$OUT_DIR/"
+          cd publish-repo
+          git init
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git checkout -b "$OUT_BRANCH"
+          cp -a "../$OUT_DIR" .
+          git add .
+          git commit -m "Publish munch SukiSU Ultra v4.1.3 artifact ${GITHUB_RUN_ID}"
+          git remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push -f origin "$OUT_BRANCH"
+          echo "output_branch=${OUT_BRANCH}" >> "$GITHUB_STEP_SUMMARY"
