@@ -35,6 +35,8 @@ jobs:
       KERNEL_BRANCH: "android15-lineage22-mod"
       ANYKERNEL_REPO: "https://github.com/liyafe1997/AnyKernel3"
       ANYKERNEL_BRANCH: "kona"
+      DEVICE: ${{ github.event.inputs.phonea || 'munch' }}
+      ROOT_LABEL: ${{ github.event.inputs.roota || 'sukisu-ultra-v4.1.3' }}
 
     steps:
       - name: Prepare toolchain
@@ -227,7 +229,7 @@ jobs:
           sed -i 's/120 90 60/120 90 60 50 30/g' ${dts_source}/dsi-panel-g7a-37-02-0b-dsc-video.dtsi
           sed -i 's/144 120 90 60/144 120 90 60 50 48 30/g' ${dts_source}/dsi-panel-j3s-37-02-0a-dsc-video.dtsi
 
-          make $MAKE_ARGS "${{ inputs.phonea }}_defconfig"
+          make $MAKE_ARGS "${DEVICE}_defconfig"
           scripts/config --file out/.config \
             -e KPROBES \
             -e KRETPROBES \
@@ -287,13 +289,13 @@ jobs:
 
           (
             cd anykernel
-            ZIP_FILENAME="Kernel_MIUI_${{ inputs.phonea }}_SukiSU-Ultra-v4.1.3_$(date +'%Y%m%d_%H%M%S')_anykernel3_$(git rev-parse --short=8 HEAD).zip"
+            ZIP_FILENAME="Kernel_MIUI_${DEVICE}_SukiSU-Ultra-v4.1.3_$(date +'%Y%m%d_%H%M%S')_anykernel3_$(git rev-parse --short=8 HEAD).zip"
             zip -r9 "$ZIP_FILENAME" ./* -x .git .gitignore out/ ./*.zip
             mv "$ZIP_FILENAME" "$GITHUB_WORKSPACE/sukisu-output/"
           )
 
           {
-            echo "device=${{ inputs.phonea }}"
+            echo "device=${DEVICE}"
             echo "rom=MIUI"
             echo "root=SukiSU Ultra"
             echo "sukisu_ref=${SUKISU_REF}"
