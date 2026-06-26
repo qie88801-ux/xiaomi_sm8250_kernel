@@ -111,7 +111,7 @@ jobs:
           patch_perl drivers/kernelsu/runtime/ksud_integration.c 's@#include <linux/uaccess.h>\n@#include <linux/uaccess.h>\n#ifndef strncpy_from_user_nofault\n#define strncpy_from_user_nofault strncpy_from_user\n#endif\n#ifndef copy_from_user_nofault\n#define copy_from_user_nofault copy_from_user\n#endif\n#ifndef copy_to_user_nofault\n#define copy_to_user_nofault copy_to_user\n#endif\n@g'
           patch_perl drivers/kernelsu/selinux/selinux.c 's@#include "objsec.h"\n@#include "objsec.h"\n#ifndef selinux_cred\n#define selinux_cred(cred) ((struct task_security_struct *)((cred)->security))\n#endif\n@g'
           patch_perl drivers/kernelsu/sulog/event.c 's@#include <linux/minmax.h>@#include <linux/kernel.h>@g; s@#include <linux/uaccess.h>\n@#include <linux/uaccess.h>\n#ifndef strncpy_from_user_nofault\n#define strncpy_from_user_nofault strncpy_from_user\n#endif\n@g'
-          patch_perl drivers/kernelsu/supercall/dispatch.c 's@#include <linux/thread_info.h>\n@#include <linux/thread_info.h>\n#include <linux/sched/task.h>\n#include <linux/sched/signal.h>\n@g'
+          patch_perl drivers/kernelsu/supercall/dispatch.c 's@#include <linux/version.h>\n@#include <linux/version.h>\n#include <linux/sched/task.h>\n#include <linux/sched/signal.h>\n#include <linux/pid.h>\n@g'
           patch_perl drivers/kernelsu/supercall/supercall.c 's@#include <linux/task_work.h>\n@#include <linux/task_work.h>\n#ifndef TWA_RESUME\n#define TWA_RESUME 1\n#endif\n@g'
 
           cat > drivers/kernelsu/selinux/rules.c <<'EOF'
