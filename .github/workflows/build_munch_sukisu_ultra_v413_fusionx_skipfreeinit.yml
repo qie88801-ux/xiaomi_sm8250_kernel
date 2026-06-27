@@ -339,11 +339,16 @@ jobs:
               struct file *filp;
               int fd;
 
-              fd = get_unused_fd_flags(O_CLOEXEC);
+              /*
+               * SukiSU manager launches libksud.so via exec. MIUI's app seccomp
+               * profile blocks the reboot supercall in that child process, so keep
+               * the manager driver fd inheritable and let libksud reuse it directly.
+               */
+              fd = get_unused_fd_flags(0);
               if (fd < 0)
                   return fd;
 
-              filp = anon_inode_getfile("[ksu_driver]", &anon_ksu_fops, NULL, O_RDWR | O_CLOEXEC);
+              filp = anon_inode_getfile("[ksu_driver]", &anon_ksu_fops, NULL, O_RDWR);
               if (IS_ERR(filp)) {
                   put_unused_fd(fd);
                   return PTR_ERR(filp);
