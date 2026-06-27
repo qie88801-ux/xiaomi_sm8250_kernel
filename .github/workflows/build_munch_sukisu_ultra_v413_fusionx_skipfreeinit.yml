@@ -160,9 +160,9 @@ jobs:
 
           path = Path("kernel/sys.c")
           text = path.read_text()
-          anchor = "SYSCALL_DEFINE3(setresuid, uid_t, ruid, uid_t, euid, uid_t, suid)\n"
+          anchor = "long __sys_setresuid(uid_t ruid, uid_t euid, uid_t suid)\n"
           if anchor not in text:
-              raise SystemExit("setresuid syscall anchor not found")
+              raise SystemExit("__sys_setresuid anchor not found")
           extern = (
               "#ifdef CONFIG_KSU\n"
               "extern int ksu_handle_setresuid(uid_t old_uid, uid_t new_uid);\n"
@@ -172,10 +172,10 @@ jobs:
           if "ksu_handle_setresuid(uid_t old_uid" not in text:
               text = text.replace(anchor, extern + anchor, 1)
           start = text.index(anchor)
-          next_syscall = text.find("\nSYSCALL_DEFINE", start + len(anchor))
-          if next_syscall == -1:
-              raise SystemExit("next syscall after setresuid not found")
-          block = text[start:next_syscall]
+          next_func = text.find("\nSYSCALL_DEFINE3(setresuid", start + len(anchor))
+          if next_func == -1:
+              raise SystemExit("setresuid wrapper after __sys_setresuid not found")
+          block = text[start:next_func]
           if "ksu_old_uid" not in block:
               block = block.replace(
                   "{\n",
@@ -200,7 +200,7 @@ jobs:
               if old_return not in block:
                   raise SystemExit("setresuid commit_creds return not found")
               block = block.replace(old_return, new_return, 1)
-          text = text[:start] + block + text[next_syscall:]
+          text = text[:start] + block + text[next_func:]
           path.write_text(text)
           PY
           grep -n "ksu_handle_setresuid" kernel/sys.c
