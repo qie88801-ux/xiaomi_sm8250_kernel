@@ -77,7 +77,10 @@ jobs:
           export SUBARCH=arm64
           export CCACHE_DIR="$HOME/.cache/ccache_munch_sukisu_v413"
 
-          MAKE_ARGS="ARCH=arm64 SUBARCH=arm64 O=out CC=$TOOLCHAIN/clang CROSS_COMPILE=$TOOLCHAIN/aarch64-linux-gnu- CROSS_COMPILE_ARM32=$ARM32_WRAP/arm-linux-gnueabi- CROSS_COMPILE_COMPAT=$ARM32_WRAP/arm-linux-gnueabi- CLANG_TRIPLE=aarch64-linux-gnu-"
+          for tool in ld.lld llvm-ar llvm-nm llvm-objcopy llvm-objdump llvm-readelf llvm-strip; do
+            test -x "$TOOLCHAIN/$tool"
+          done
+          MAKE_ARGS="ARCH=arm64 SUBARCH=arm64 O=out CC=$TOOLCHAIN/clang LD=$TOOLCHAIN/ld.lld AR=$TOOLCHAIN/llvm-ar NM=$TOOLCHAIN/llvm-nm OBJCOPY=$TOOLCHAIN/llvm-objcopy OBJDUMP=$TOOLCHAIN/llvm-objdump READELF=$TOOLCHAIN/llvm-readelf STRIP=$TOOLCHAIN/llvm-strip CROSS_COMPILE=$TOOLCHAIN/aarch64-linux-gnu- CROSS_COMPILE_ARM32=$ARM32_WRAP/arm-linux-gnueabi- CROSS_COMPILE_COMPAT=$ARM32_WRAP/arm-linux-gnueabi- CLANG_TRIPLE=aarch64-linux-gnu-"
 
           echo "[kernel source]"
           git rev-parse HEAD
@@ -114,11 +117,9 @@ jobs:
             fi
           }
 
-          if grep -q "ksu_vfs_read_hook" fs/read_write.c 2>/dev/null; then
-            for legacy_hook_file in fs/read_write.c fs/exec.c drivers/input/input.c drivers/tty/pty.c; do
-              patch_perl "$legacy_hook_file" "s@#ifdef CONFIG_KSU@#if 0 /* disabled legacy KernelSU hook */@g"
-            done
-          fi
+          for legacy_hook_file in fs/read_write.c fs/exec.c fs/open.c fs/stat.c drivers/input/input.c drivers/tty/pty.c kernel/reboot.c; do
+            patch_perl "$legacy_hook_file" 's@#if defined\(CONFIG_KSU\) && !defined\(CONFIG_KSU_KPROBES_HOOK\)@#if 0 /* disabled legacy KernelSU hook for official SukiSU */@g; s@#ifdef CONFIG_KSU@#if 0 /* disabled legacy KernelSU hook for official SukiSU */@g'
+          done
 
           # Compatibility shims for official SukiSU Ultra v4.1.3 on Xiaomi 4.19 trees.
           find -L drivers/kernelsu -name "*.c" -type f -exec sed -i "s/access_ok(/access_ok(VERIFY_READ, /g" {} +
