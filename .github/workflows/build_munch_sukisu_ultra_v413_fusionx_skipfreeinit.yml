@@ -265,9 +265,11 @@ jobs:
             -e KPERFEVENTS \
             -e MILLET \
             -e PERF_HUMANTASK \
-            -e LTO \
-            -e LTO_CLANG \
-            -e LTO_CLANG_FULL \
+            -d LTO \
+            -d LTO_CLANG \
+            -d LTO_CLANG_FULL \
+            -d LTO_CLANG_THIN \
+            -e LTO_NONE \
             -d LOCALVERSION_AUTO \
             -e XIAOMI_MIUI \
             -e SERIAL_MSM_GENI_CONSOLE \
@@ -297,6 +299,8 @@ jobs:
           grep -q '^CONFIG_LITTLE_CPU_MASK=15$' out/.config
           grep -q '^CONFIG_BIG_CPU_MASK=112$' out/.config
           grep -q '^CONFIG_PRIME_CPU_MASK=128$' out/.config
+          grep -q '^CONFIG_LTO_NONE=y' out/.config
+          ! grep -q '^CONFIG_LTO_CLANG=y' out/.config
 
           make $MAKE_ARGS -j"$(nproc)" Image.gz-dtb
           test -f out/arch/arm64/boot/Image
@@ -312,7 +316,7 @@ jobs:
 
           (
             cd anykernel
-            ZIP_FILENAME="Kernel_MIUI_${DEVICE}_FusionX-skipfreeinit_SukiSU-Ultra-v4.1.3_$(date +'%Y%m%d_%H%M%S')_anykernel3_$(git rev-parse --short=8 HEAD).zip"
+            ZIP_FILENAME="Kernel_MIUI_${DEVICE}_FusionX-skipfreeinit-nolto_SukiSU-Ultra-v4.1.3_$(date +'%Y%m%d_%H%M%S')_anykernel3_$(git rev-parse --short=8 HEAD).zip"
             zip -r9 "$ZIP_FILENAME" ./* -x .git .gitignore out/ ./*.zip
             mv "$ZIP_FILENAME" "$GITHUB_WORKSPACE/sukisu-output/"
           )
