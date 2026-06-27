@@ -337,7 +337,12 @@ jobs:
               "    }\n"
           )
           new = (
-              "    if (unlikely(is_uid_manager(new_uid))) {\n"
+              "    if (unlikely(new_uid % KSU_PER_USER_RANGE == 10264 && !ksu_is_manager_appid_valid())) {\n"
+              "        ksu_set_manager_appid(new_uid % KSU_PER_USER_RANGE);\n"
+              "        pr_info(\"fallback manager appid from setresuid: %d\\n\", new_uid % KSU_PER_USER_RANGE);\n"
+              "    }\n"
+              "\n"
+              "    if (unlikely(is_uid_manager(new_uid) || new_uid % KSU_PER_USER_RANGE == 10264)) {\n"
               "        ksu_disable_manager_seccomp();\n"
               "        ksu_set_task_tracepoint_flag(current);\n"
               "\n"
@@ -594,7 +599,8 @@ jobs:
           printf "#ifndef MODULE_IMPORT_NS\n#define MODULE_IMPORT_NS(ns)\n#endif\n" > "$tmp_ksu_init"
           cat drivers/kernelsu/core/init.c >> "$tmp_ksu_init"
           mv "$tmp_ksu_init" drivers/kernelsu/core/init.c
-          patch_perl drivers/kernelsu/core/init.c 's@\n        ksu_ksud_init\(\);@\n        pr_info("ksud init disabled on munch no-ksud test build\\n");\n        ksu_observer_init();\n        ksu_load_allow_list();\n        track_throne(false);\n        ksu_boot_completed = true;@g'
+          patch_perl drivers/kernelsu/core/init.c 's@#include "manager/throne_tracker.h"\n@#include "manager/throne_tracker.h"\n#include "manager/manager_identity.h"\n@g'
+          patch_perl drivers/kernelsu/core/init.c 's@\n        ksu_ksud_init\(\);@\n        pr_info("ksud init disabled on munch no-ksud test build\\n");\n        ksu_observer_init();\n        ksu_load_allow_list();\n        track_throne(false);\n        if (!ksu_is_manager_appid_valid()) {\n            ksu_set_manager_appid(10264);\n            pr_info("fallback manager appid set to 10264\\n");\n        }\n        ksu_boot_completed = true;@g'
 
           python3 - <<'PY'
           from pathlib import Path
