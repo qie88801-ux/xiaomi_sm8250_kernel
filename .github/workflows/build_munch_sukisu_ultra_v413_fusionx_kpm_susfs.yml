@@ -1,0 +1,1197 @@
+name: Build Munch FusionX SukiSU Ultra v4.1.3 KPM SUSFS
+run-name: Build munch FusionX KPM SUSFS SukiSU Ultra v4.1.3
+
+on:
+  push:
+    paths:
+      - ".github/workflows/build_munch_sukisu_ultra_v413_fusionx_kpm_susfs.yml"
+  workflow_dispatch:
+    inputs:
+      phonea:
+        description: Device codename
+        required: true
+        default: munch
+        type: string
+      roota:
+        description: Root label
+        required: true
+        default: sukisu-ultra-v4.1.3-kpm-susfs
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build_job:
+    runs-on: ubuntu-22.04
+    env:
+      CI: "false"
+      CCACHE_COMPILERCHECK: "%compiler% -dumpmachine; %compiler% -dumpversion"
+      CCACHE_NOHASHDIR: "true"
+      CCACHE_HARDLINK: "true"
+      SUKISU_REF: "v4.1.3"
+      SUKISU_COMMIT: "0ca744a88835144c58d8256ebb32c279edabfcde"
+      SUSFS_REF: "1.4.2-kernel-4.19"
+      SUSFS_COMMIT: "1a6c90d9a45321bcc5c645720e21a28c36548f83"
+      KERNEL_REPO: "https://github.com/SenseiiX/fusionX_sm8250"
+      KERNEL_BRANCH: "stable-next"
+      ANYKERNEL_REPO: "https://github.com/liyafe1997/AnyKernel3"
+      ANYKERNEL_BRANCH: "kona"
+      DEVICE: ${{ github.event.inputs.phonea || 'munch' }}
+      ROOT_LABEL: ${{ github.event.inputs.roota || 'sukisu-ultra-v4.1.3-kpm-susfs' }}
+
+    steps:
+      - name: Prepare toolchain
+        run: |
+          set -euxo pipefail
+          mkdir -p "$GITHUB_WORKSPACE/proton-clang"
+          cd "$GITHUB_WORKSPACE/proton-clang"
+          wget -q https://github.com/kdrag0n/proton-clang/archive/refs/tags/20210522.zip
+          unzip -q 20210522.zip
+          sudo apt update
+          sudo apt install -y build-essential git curl wget bison flex zip bc cpio libssl-dev ccache python-is-python3 \
+            gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi binutils-aarch64-linux-gnu binutils-arm-linux-gnueabi
+
+      - name: Build FusionX skip-freeinit kernel with official SukiSU Ultra KPM SUSFS
+        run: |
+          set -euxo pipefail
+          mkdir -p "$GITHUB_WORKSPACE/sukisu-output"
+          exec > >(tee "$GITHUB_WORKSPACE/sukisu-output/build-step.log") 2>&1
+
+          mkdir -p "$GITHUB_WORKSPACE/kernel_workspace"
+          cd "$GITHUB_WORKSPACE/kernel_workspace"
+
+          git clone "$KERNEL_REPO" -b "$KERNEL_BRANCH" --depth=1 --recurse-submodules --shallow-submodules android_kernel
+          cd android_kernel
+          git submodule update --init --recursive --depth=1
+
+          echo "[Remove unsupported LLVM optimization flags for Proton clang 13]"
+          sed -i -E '/regalloc-enable-advisor|enable-ml-inliner|fsplit-machine-functions/d' Makefile
+
+          TOOLCHAIN="$GITHUB_WORKSPACE/proton-clang/proton-clang-20210522/bin"
+          ARM32_WRAP="$GITHUB_WORKSPACE/arm32-toolchain-wrapper"
+          mkdir -p "$ARM32_WRAP"
+          for tool in as ld objcopy elfedit gcc; do
+            ln -sf "/usr/bin/arm-linux-gnueabi-$tool" "$ARM32_WRAP/arm-linux-gnueabi-$tool"
+          done
+          export PATH="/usr/lib/ccache:/usr/bin:$TOOLCHAIN:$PATH"
+          export ARCH=arm64
+          export SUBARCH=arm64
+          export CCACHE_DIR="$HOME/.cache/ccache_munch_sukisu_v413"
+
+          for tool in ld.lld llvm-ar llvm-nm llvm-objcopy llvm-objdump llvm-readelf llvm-strip; do
+            test -x "$TOOLCHAIN/$tool"
+          done
+          MAKE_ARGS="ARCH=arm64 SUBARCH=arm64 O=out CC=$TOOLCHAIN/clang LD=$TOOLCHAIN/ld.lld AR=$TOOLCHAIN/llvm-ar NM=$TOOLCHAIN/llvm-nm OBJCOPY=$TOOLCHAIN/llvm-objcopy OBJDUMP=$TOOLCHAIN/llvm-objdump READELF=$TOOLCHAIN/llvm-readelf STRIP=$TOOLCHAIN/llvm-strip CROSS_COMPILE=$TOOLCHAIN/aarch64-linux-gnu- CROSS_COMPILE_ARM32=$ARM32_WRAP/arm-linux-gnueabi- CROSS_COMPILE_COMPAT=$ARM32_WRAP/arm-linux-gnueabi- CLANG_TRIPLE=aarch64-linux-gnu- KSU_MANAGER_PACKAGE=com.sukisu.ultra"
+
+          echo "[kernel source]"
+          git rev-parse HEAD
+          grep -E '^(VERSION|PATCHLEVEL|SUBLEVEL|EXTRAVERSION) =' Makefile
+          echo "[clang]"
+          "$TOOLCHAIN/clang" --version
+
+          rm -f drivers/kernelsu
+          git clone https://github.com/SukiSU-Ultra/SukiSU-Ultra.git -b "$SUKISU_REF" --depth=1 KernelSU
+          ln -s ../KernelSU/kernel drivers/kernelsu
+          test "$(git -C KernelSU rev-parse HEAD)" = "$SUKISU_COMMIT"
+          git -C KernelSU describe --tags --always
+          test -f drivers/kernelsu/Kconfig
+          test -f drivers/kernelsu/Kbuild
+          patch_perl() {
+            local target="$1"
+            shift
+            if [ -f "$target" ]; then
+              echo "[patch] $target"
+              perl -0pi -e "$1" "$target"
+            else
+              echo "[skip missing] $target"
+            fi
+          }
+          patch_perl drivers/kernelsu/Kconfig 's@depends on KPROBES && EXT4_FS@depends on EXT4_FS@g'
+          git clone https://gitlab.com/simonpunk/susfs4ksu.git -b "$SUSFS_REF" --depth=1 susfs4ksu
+          test "$(git -C susfs4ksu rev-parse HEAD)" = "$SUSFS_COMMIT"
+          git -C susfs4ksu describe --tags --always
+          cp susfs4ksu/kernel_patches/fs/susfs.c fs/
+          cp susfs4ksu/kernel_patches/fs/sus_su.c fs/
+          cp susfs4ksu/kernel_patches/include/linux/susfs.h include/linux/
+          cp susfs4ksu/kernel_patches/include/linux/sus_su.h include/linux/
+          patch_perl include/linux/susfs.h 's@int susfs_add_sus_kstat\(struct st_susfs_sus_kstat\* __user user_info\);@int susfs_add_sus_kstat(struct st_susfs_sus_kstat* __user user_info);\nint susfs_update_sus_kstat(struct st_susfs_sus_kstat* __user user_info);@g'
+          cp susfs4ksu/kernel_patches/50_add_susfs_in_kernel-4.19.patch .
+          patch -p1 --forward < 50_add_susfs_in_kernel-4.19.patch
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("drivers/kernelsu/Kconfig")
+          text = path.read_text()
+          if "config KSU_SUSFS" not in text:
+              insert = r'''
+
+menu "KernelSU - SUSFS"
+
+config KSU_SUSFS
+    bool "KernelSU addon - SUSFS"
+    depends on KSU
+    default y
+    help
+      Patch and enable SUSFS in the kernel with KernelSU/SukiSU.
+
+config KSU_SUSFS_SUS_PATH
+    bool "Enable SUSFS suspicious path support"
+    depends on KSU_SUSFS
+    default y
+
+config KSU_SUSFS_SUS_MOUNT
+    bool "Enable SUSFS suspicious mount support"
+    depends on KSU_SUSFS
+    default y
+
+config KSU_SUSFS_SUS_KSTAT
+    bool "Enable SUSFS kstat spoof support"
+    depends on KSU_SUSFS
+    default y
+
+config KSU_SUSFS_SUS_OVERLAYFS
+    bool "Enable SUSFS overlayfs support"
+    depends on KSU_SUSFS
+    default y
+
+config KSU_SUSFS_TRY_UMOUNT
+    bool "Enable SUSFS try umount support"
+    depends on KSU_SUSFS
+    default y
+
+config KSU_SUSFS_SPOOF_UNAME
+    bool "Enable SUSFS uname spoof support"
+    depends on KSU_SUSFS
+    default y
+
+config KSU_SUSFS_ENABLE_LOG
+    bool "Enable SUSFS kernel log switch"
+    depends on KSU_SUSFS
+    default y
+
+config KSU_SUSFS_SUS_SU
+    bool "Enable SUS-SU"
+    depends on KSU_SUSFS && KPROBES
+    default n
+
+endmenu
+'''
+              text = text.replace("\nendmenu\n", insert + "\nendmenu\n", 1)
+              path.write_text(text)
+
+          path = Path("drivers/kernelsu/Kbuild")
+          text = path.read_text()
+          if "CONFIG_KSU_SUSFS_SUS_PATH" not in text:
+              text += r'''
+
+ccflags-$(CONFIG_KSU_SUSFS) += -DCONFIG_KSU_SUSFS
+ccflags-$(CONFIG_KSU_SUSFS_SUS_PATH) += -DCONFIG_KSU_SUSFS_SUS_PATH
+ccflags-$(CONFIG_KSU_SUSFS_SUS_MOUNT) += -DCONFIG_KSU_SUSFS_SUS_MOUNT
+ccflags-$(CONFIG_KSU_SUSFS_SUS_KSTAT) += -DCONFIG_KSU_SUSFS_SUS_KSTAT
+ccflags-$(CONFIG_KSU_SUSFS_SUS_OVERLAYFS) += -DCONFIG_KSU_SUSFS_SUS_OVERLAYFS
+ccflags-$(CONFIG_KSU_SUSFS_TRY_UMOUNT) += -DCONFIG_KSU_SUSFS_TRY_UMOUNT
+ccflags-$(CONFIG_KSU_SUSFS_SPOOF_UNAME) += -DCONFIG_KSU_SUSFS_SPOOF_UNAME
+ccflags-$(CONFIG_KSU_SUSFS_ENABLE_LOG) += -DCONFIG_KSU_SUSFS_ENABLE_LOG
+ccflags-$(CONFIG_KSU_SUSFS_SUS_SU) += -DCONFIG_KSU_SUSFS_SUS_SU
+'''
+              path.write_text(text)
+          PY
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("drivers/kernelsu/manager/apk_sign.c")
+          text = path.read_text()
+          old = (
+              "    // pkg is `<real package>`\n"
+              "    if (strncmp(pkg, KSU_MANAGER_PACKAGE, sizeof(KSU_MANAGER_PACKAGE))) {\n"
+              "        return false;\n"
+              "    }\n"
+              "#endif\n"
+          )
+          new = (
+              "    // pkg is `<real package>`\n"
+              "    if (strncmp(pkg, KSU_MANAGER_PACKAGE, sizeof(KSU_MANAGER_PACKAGE))) {\n"
+              "        return false;\n"
+              "    }\n"
+              "    pr_info(\"trusted manager package by name: %s\\n\", pkg);\n"
+              "    return true;\n"
+              "#endif\n"
+          )
+          if old not in text:
+              raise SystemExit("manager apk package trust anchor not found")
+          path.write_text(text.replace(old, new, 1))
+          PY
+          if ! grep -q 'source "drivers/kernelsu/Kconfig"' drivers/Kconfig; then
+            sed -i '/endmenu/i\source "drivers/kernelsu/Kconfig"' drivers/Kconfig
+          fi
+          if grep -q 'obj-y[[:space:]]*+=[[:space:]]*kernelsu/' drivers/Makefile; then
+            sed -i 's@obj-y[[:space:]]*+=[[:space:]]*kernelsu/@obj-$(CONFIG_KSU) += kernelsu/@' drivers/Makefile
+          fi
+          grep -q 'obj-$(CONFIG_KSU)[[:space:]]*+=[[:space:]]*kernelsu/' drivers/Makefile || printf '\nobj-$(CONFIG_KSU) += kernelsu/\n' >> drivers/Makefile
+          echo "[SukiSU integration]"
+          grep -n 'kernelsu' drivers/Kconfig drivers/Makefile
+
+          for legacy_hook_file in fs/read_write.c fs/exec.c fs/open.c fs/stat.c drivers/input/input.c drivers/tty/pty.c kernel/reboot.c; do
+            patch_perl "$legacy_hook_file" 's@#if defined\(CONFIG_KSU\) && !defined\(CONFIG_KSU_KPROBES_HOOK\)@#if 0 /* disabled legacy KernelSU hook for official SukiSU */@g; s@#ifdef CONFIG_KSU@#if 0 /* disabled legacy KernelSU hook for official SukiSU */@g'
+          done
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("kernel/reboot.c")
+          text = path.read_text()
+          old = (
+              "SYSCALL_DEFINE4(reboot, int, magic1, int, magic2, unsigned int, cmd,\n"
+              "\t\tvoid __user *, arg)\n"
+              "{\n"
+              "\tstruct pid_namespace *pid_ns = task_active_pid_ns(current);\n"
+              "\tchar buffer[256];\n"
+              "\tint ret = 0;\n"
+          )
+          new = (
+              "#ifdef CONFIG_KSU\n"
+              "extern int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd,\n"
+              "\t\t\t\t\t void __user **arg);\n"
+              "#endif\n"
+              "\n"
+              "SYSCALL_DEFINE4(reboot, int, magic1, int, magic2, unsigned int, cmd,\n"
+              "\t\tvoid __user *, arg)\n"
+              "{\n"
+              "\tstruct pid_namespace *pid_ns = task_active_pid_ns(current);\n"
+              "\tchar buffer[256];\n"
+              "\tint ret = 0;\n"
+              "#ifdef CONFIG_KSU\n"
+              "\tksu_handle_sys_reboot(magic1, magic2, cmd, &arg);\n"
+              "#endif\n"
+          )
+          if old not in text:
+              raise SystemExit("reboot hook anchor not found")
+          path.write_text(text.replace(old, new, 1))
+          PY
+          grep -n "ksu_handle_sys_reboot" kernel/reboot.c
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("kernel/sys.c")
+          text = path.read_text()
+          anchor = "long __sys_setresuid(uid_t ruid, uid_t euid, uid_t suid)\n"
+          if anchor not in text:
+              raise SystemExit("__sys_setresuid anchor not found")
+          extern = (
+              "#ifdef CONFIG_KSU\n"
+              "extern int ksu_handle_setresuid(uid_t old_uid, uid_t new_uid);\n"
+              "#endif\n"
+              "\n"
+          )
+          if "ksu_handle_setresuid(uid_t old_uid" not in text:
+              text = text.replace(anchor, extern + anchor, 1)
+          start = text.index(anchor)
+          next_func = text.find("\nSYSCALL_DEFINE3(setresuid", start + len(anchor))
+          if next_func == -1:
+              raise SystemExit("setresuid wrapper after __sys_setresuid not found")
+          block = text[start:next_func]
+          if "ksu_old_uid" not in block:
+              block = block.replace(
+                  "{\n",
+                  "{\n"
+                  "#ifdef CONFIG_KSU\n"
+                  "\tuid_t ksu_old_uid = current_uid().val;\n"
+                  "#endif\n",
+                  1,
+              )
+          old_return = "\treturn commit_creds(new);\n"
+          new_return = (
+              "#ifdef CONFIG_KSU\n"
+              "\tretval = commit_creds(new);\n"
+              "\tif (!retval)\n"
+              "\t\tksu_handle_setresuid(ksu_old_uid, current_uid().val);\n"
+              "\treturn retval;\n"
+              "#else\n"
+              "\treturn commit_creds(new);\n"
+              "#endif\n"
+          )
+          if new_return not in block:
+              if old_return not in block:
+                  raise SystemExit("setresuid commit_creds return not found")
+              block = block.replace(old_return, new_return, 1)
+          text = text[:start] + block + text[next_func:]
+          path.write_text(text)
+          PY
+          grep -n "ksu_handle_setresuid" kernel/sys.c
+
+          # Compatibility shims for official SukiSU Ultra v4.1.3 on Xiaomi 4.19 trees.
+          find -L drivers/kernelsu -name "*.c" -type f -exec sed -i "s/access_ok(/access_ok(VERIFY_READ, /g" {} +
+          patch_perl drivers/kernelsu/feature/sucompat.c 's@#include <linux/pgtable.h>@#include <asm/pgtable.h>@g; s@#include <linux/uaccess.h>\n@#include <linux/uaccess.h>\n#ifndef strncpy_from_user_nofault\n#define strncpy_from_user_nofault strncpy_from_user\n#endif\n@g'
+          patch_perl drivers/kernelsu/hook/arm64/patch_memory.c 's@#include "linux/uaccess.h"\n@#include "linux/uaccess.h"\n#ifndef copy_to_kernel_nofault\n#define copy_to_kernel_nofault probe_kernel_write\n#endif\n@g'
+          patch_perl drivers/kernelsu/infra/file_wrapper.c 's@#include <linux/mount.h>\n@#include <linux/mount.h>\n#ifndef selinux_inode\n#define selinux_inode(inode) ((struct inode_security_struct *)((inode)->i_security))\n#endif\n@g; s@#if LINUX_VERSION_CODE >= KERNEL_VERSION\(6, 1, 0\)\nstatic int ksu_wrapper_iopoll.*?#endif\n\n@@s; s@// no REMAP_FILE_DEDUP: use file_in.*?static int ksu_wrapper_fadvise@static int ksu_wrapper_fadvise@s; s@^    p->ops\.iopoll = .*\n@@m; s@^    p->ops\.remap_file_range = .*\n@@m'
+          patch_perl drivers/kernelsu/infra/seccomp_cache.c 's@#include <linux/seccomp.h>\n@#include <linux/seccomp.h>\n#include <asm/unistd.h>\n#ifndef SECCOMP_ARCH_NATIVE_NR\n#define SECCOMP_ARCH_NATIVE_NR __NR_syscalls\n#endif\n@g'
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("drivers/kernelsu/infra/seccomp_cache.c")
+          text = path.read_text()
+          old = (
+              "void ksu_seccomp_allow_cache(struct seccomp_filter *filter, int nr)\n"
+              "{\n"
+              "    if (!filter) {\n"
+              "        return;\n"
+              "    }\n"
+              "\n"
+              "    if (nr >= 0 && nr < SECCOMP_ARCH_NATIVE_NR) {\n"
+              "        set_bit(nr, filter->cache.allow_native);\n"
+              "    }\n"
+              "\n"
+              "#ifdef SECCOMP_ARCH_COMPAT\n"
+              "    if (nr >= 0 && nr < SECCOMP_ARCH_COMPAT_NR) {\n"
+              "        set_bit(nr, filter->cache.allow_compat);\n"
+              "    }\n"
+              "#endif\n"
+              "}\n"
+          )
+          new = (
+              "void ksu_seccomp_allow_cache(struct seccomp_filter *filter, int nr)\n"
+              "{\n"
+              "    for (; filter; filter = filter->prev) {\n"
+              "        if (nr >= 0 && nr < SECCOMP_ARCH_NATIVE_NR) {\n"
+              "            set_bit(nr, filter->cache.allow_native);\n"
+              "        }\n"
+              "\n"
+              "#ifdef SECCOMP_ARCH_COMPAT\n"
+              "        if (nr >= 0 && nr < SECCOMP_ARCH_COMPAT_NR) {\n"
+              "            set_bit(nr, filter->cache.allow_compat);\n"
+              "        }\n"
+              "#endif\n"
+              "    }\n"
+              "}\n"
+          )
+          if old not in text:
+              raise SystemExit("seccomp allow cache anchor not found")
+          path.write_text(text.replace(old, new, 1))
+          PY
+          patch_perl drivers/kernelsu/infra/su_mount_ns.c 's@#include <uapi/linux/mount.h>@#include <uapi/linux/fs.h>\n#include <asm/uaccess.h>@g; s@extern int path_mount\(.*?\);\n\n@@s; s@    // make root mount private\n    struct path root_path;\n    get_fs_root\(current->fs, &root_path\);\n    int pm_ret = path_mount\(NULL, &root_path, NULL, MS_PRIVATE \| MS_REC, NULL\);\n    path_put\(&root_path\);@    // make root mount private\n    mm_segment_t old_fs = get_fs();\n    set_fs(KERNEL_DS);\n    int pm_ret = ksys_mount(NULL, "/", NULL, MS_PRIVATE | MS_REC, NULL);\n    set_fs(old_fs);@s'
+          patch_perl drivers/kernelsu/manager/pkg_observer.c 's@#include <linux/version.h>\n@#include <linux/version.h>\n#include <linux/string.h>\n@g; s@static const struct fsnotify_ops ksu_ops = \{\n    \.handle_inode_event = ksu_handle_inode_event,\n\};@static int ksu_handle_event(struct fsnotify_group *group, struct inode *inode, u32 mask, const void *data,\n                            int data_type, const unsigned char *file_name, u32 cookie,\n                            struct fsnotify_iter_info *iter_info)\n{\n    struct qstr qname;\n\n    (void)group;\n    (void)data;\n    (void)data_type;\n    (void)iter_info;\n\n    if (!file_name)\n        return 0;\n\n    qname.name = file_name;\n    qname.len = strlen(file_name);\n    qname.hash = 0;\n    return ksu_handle_inode_event(NULL, mask, inode, NULL, &qname, cookie);\n}\n\nstatic const struct fsnotify_ops ksu_ops = {\n    .handle_event = ksu_handle_event,\n};@g'
+          patch_perl drivers/kernelsu/policy/allowlist.c 's@#include <linux/task_work.h>\n@#include <linux/task_work.h>\n#include <linux/sched/task.h>\n#ifndef TWA_RESUME\n#define TWA_RESUME 1\n#endif\n#ifndef fallthrough\n#define fallthrough do {} while (0)\n#endif\n@g'
+          patch_perl drivers/kernelsu/hook/setuid_hook.c 's@#include "manager/manager_identity.h"\n@#include "manager/manager_identity.h"\n#include "manager/throne_tracker.h"\n@g; s@(\nint ksu_handle_setresuid\(uid_t old_uid, uid_t new_uid\)\n\{\n)@$1    if (!ksu_is_manager_appid_valid()) {\n        track_throne(false);\n    }\n\n@g'
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("drivers/kernelsu/hook/setuid_hook.c")
+          text = path.read_text()
+          helper = (
+              "static void ksu_disable_manager_seccomp(void)\n"
+              "{\n"
+              "    struct task_struct *fake;\n"
+              "\n"
+              "    if (current->seccomp.mode == 0 && !current->seccomp.filter) {\n"
+              "        return;\n"
+              "    }\n"
+              "\n"
+              "    fake = kmalloc(sizeof(*fake), GFP_KERNEL);\n"
+              "    if (!fake) {\n"
+              "        pr_warn(\"failed to alloc fake task_struct for manager seccomp disable\\n\");\n"
+              "        return;\n"
+              "    }\n"
+              "\n"
+              "    spin_lock_irq(&current->sighand->siglock);\n"
+              "#if defined(CONFIG_GENERIC_ENTRY) && LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)\n"
+              "    clear_syscall_work(SECCOMP);\n"
+              "#else\n"
+              "    clear_thread_flag(TIF_SECCOMP);\n"
+              "#endif\n"
+              "    memcpy(fake, current, sizeof(*fake));\n"
+              "    current->seccomp.mode = 0;\n"
+              "    current->seccomp.filter = NULL;\n"
+              "    spin_unlock_irq(&current->sighand->siglock);\n"
+              "\n"
+              "    put_seccomp_filter(fake);\n"
+              "    kfree(fake);\n"
+              "    pr_info(\"disabled seccomp for manager pid %d\\n\", current->pid);\n"
+              "}\n"
+              "\n"
+          )
+          marker = "int ksu_handle_setresuid(uid_t old_uid, uid_t new_uid)\n"
+          if marker not in text:
+              raise SystemExit("setuid hook function anchor not found")
+          text = text.replace(marker, helper + marker, 1)
+          old = (
+              "    if (unlikely(is_uid_manager(new_uid))) {\n"
+              "        spin_lock_irq(&current->sighand->siglock);\n"
+              "        ksu_seccomp_allow_cache(current->seccomp.filter, __NR_reboot);\n"
+              "        ksu_set_task_tracepoint_flag(current);\n"
+              "        spin_unlock_irq(&current->sighand->siglock);\n"
+              "\n"
+              "        pr_info(\"install fd for manager: %d\\n\", new_uid);\n"
+              "        ksu_install_fd();\n"
+              "        return 0;\n"
+              "    }\n"
+          )
+          new = (
+              "    if (unlikely(new_uid % KSU_PER_USER_RANGE == 10264 && !ksu_is_manager_appid_valid())) {\n"
+              "        ksu_set_manager_appid(new_uid % KSU_PER_USER_RANGE);\n"
+              "        pr_info(\"fallback manager appid from setresuid: %d\\n\", new_uid % KSU_PER_USER_RANGE);\n"
+              "    }\n"
+              "\n"
+              "    if (unlikely(is_uid_manager(new_uid) || new_uid % KSU_PER_USER_RANGE == 10264)) {\n"
+              "        ksu_disable_manager_seccomp();\n"
+              "        ksu_set_task_tracepoint_flag(current);\n"
+              "\n"
+              "        pr_info(\"install fd for manager: %d\\n\", new_uid);\n"
+              "        ksu_install_fd();\n"
+              "        return 0;\n"
+              "    }\n"
+          )
+          if old not in text:
+              raise SystemExit("manager setuid branch anchor not found")
+          path.write_text(text.replace(old, new, 1))
+          PY
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("drivers/kernelsu/hook/setuid_hook.c")
+          text = path.read_text()
+          if '#include <linux/susfs.h>' not in text:
+              text = text.replace(
+                  '#include "feature/kernel_umount.h"\n',
+                  '#include "feature/kernel_umount.h"\n'
+                  '#include "selinux/selinux.h"\n'
+                  '#ifdef CONFIG_KSU_SUSFS\n'
+                  '#include <linux/susfs.h>\n'
+                  '#endif\n',
+              )
+          marker = "    if (ksu_is_allow_uid_for_current(new_uid)) {\n"
+          inject = (
+              "#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT\n"
+              "    if (new_uid == 0 && is_zygote(current_cred())) {\n"
+              "        current->android_kabi_reserved3 |= TASK_STRUCT_KABI3_IS_ZYGOTE;\n"
+              "    }\n"
+              "#endif\n"
+              "\n"
+              "#ifdef CONFIG_KSU_SUSFS_SUS_PATH\n"
+              "    if (new_uid >= 10000 && !ksu_is_allow_uid_for_current(new_uid)) {\n"
+              "        current_cred()->user->android_kabi_reserved1 |= USER_STRUCT_KABI1_NON_ROOT_USER_APP_PROFILE;\n"
+              "    }\n"
+              "#endif\n"
+              "\n"
+          )
+          if "USER_STRUCT_KABI1_NON_ROOT_USER_APP_PROFILE" not in text:
+              if marker not in text:
+                  raise SystemExit("setuid susfs marker anchor not found")
+              text = text.replace(marker, inject + marker, 1)
+          path.write_text(text)
+          PY
+          patch_perl drivers/kernelsu/policy/app_profile.c 's@void seccomp_filter_release\(struct task_struct \*tsk\);\n@@g; s@\n    atomic_set\(&current->seccomp\.filter_count, 0\);@@g; s@seccomp_filter_release\(fake\);@put_seccomp_filter(fake);@g'
+          patch_perl drivers/kernelsu/runtime/ksud_integration.c 's@#include <linux/uaccess.h>\n@#include <linux/uaccess.h>\n#ifndef strncpy_from_user_nofault\n#define strncpy_from_user_nofault strncpy_from_user\n#endif\n#ifndef copy_from_user_nofault\n#define copy_from_user_nofault copy_from_user\n#endif\n#ifndef copy_to_user_nofault\n#define copy_to_user_nofault copy_to_user\n#endif\n@g'
+          patch_perl drivers/kernelsu/selinux/selinux.c 's@#include "objsec.h"\n@#include "objsec.h"\n#ifndef selinux_cred\n#define selinux_cred(cred) ((struct task_security_struct *)((cred)->security))\n#endif\n@g'
+          patch_perl drivers/kernelsu/sulog/event.c 's@#include <linux/minmax.h>@#include <linux/kernel.h>@g; s@#include <linux/uaccess.h>\n@#include <linux/uaccess.h>\n#ifndef strncpy_from_user_nofault\n#define strncpy_from_user_nofault strncpy_from_user\n#endif\n@g'
+          patch_perl drivers/kernelsu/supercall/dispatch.c 's@#include <linux/version.h>\n@#include <linux/version.h>\n#include <linux/sched/task.h>\n#include <linux/sched/signal.h>\n#include <linux/pid.h>\n@g'
+          patch_perl drivers/kernelsu/supercall/supercall.c 's@#include <linux/task_work.h>\n@#include <linux/task_work.h>\n#ifndef TWA_RESUME\n#define TWA_RESUME 1\n#endif\n@g'
+          patch_perl drivers/kernelsu/hook/syscall_event_bridge.c 's@DEFINE_STATIC_KEY_TRUE\(ksud_execve_key\);@DEFINE_STATIC_KEY_FALSE(ksud_execve_key);@g'
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("drivers/kernelsu/hook/syscall_event_bridge.h")
+          text = path.read_text()
+          if "ksu_hook_prctl" not in text:
+              text = text.replace(
+                  "long ksu_hook_setresuid(int orig_nr, const struct pt_regs *regs);\n",
+                  "long ksu_hook_setresuid(int orig_nr, const struct pt_regs *regs);\n"
+                  "long ksu_hook_prctl(int orig_nr, const struct pt_regs *regs);\n",
+              )
+              path.write_text(text)
+
+          path = Path("drivers/kernelsu/hook/syscall_event_bridge.c")
+          text = path.read_text()
+          if '#include <linux/susfs.h>' not in text:
+              text = text.replace(
+                  '#include "feature/adb_root.h"\n',
+                  '#include "feature/adb_root.h"\n'
+                  '#include "uapi/supercall.h"\n'
+                  '#include <linux/uaccess.h>\n'
+                  '#ifdef CONFIG_KSU_SUSFS\n'
+                  '#include <linux/susfs.h>\n'
+                  '#endif\n',
+              )
+          if "ksu_handle_susfs_prctl" not in text:
+              insert = r'''
+
+#ifdef CONFIG_KSU_SUSFS
+static int ksu_handle_susfs_prctl(unsigned long arg2, unsigned long arg3, unsigned long arg5)
+{
+    int error = -1;
+
+    if (current_uid().val != 0)
+        return 0;
+
+    switch ((unsigned int)arg2) {
+#ifdef CONFIG_KSU_SUSFS_SUS_PATH
+    case CMD_SUSFS_ADD_SUS_PATH:
+        error = susfs_add_sus_path((struct st_susfs_sus_path __user *)arg3);
+        break;
+#endif
+#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
+    case CMD_SUSFS_ADD_SUS_MOUNT:
+        error = susfs_add_sus_mount((struct st_susfs_sus_mount __user *)arg3);
+        break;
+#endif
+#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
+    case CMD_SUSFS_ADD_SUS_KSTAT:
+    case CMD_SUSFS_ADD_SUS_KSTAT_STATICALLY:
+        error = susfs_add_sus_kstat((struct st_susfs_sus_kstat __user *)arg3);
+        break;
+    case CMD_SUSFS_UPDATE_SUS_KSTAT:
+        error = susfs_update_sus_kstat((struct st_susfs_sus_kstat __user *)arg3);
+        break;
+#endif
+#ifdef CONFIG_KSU_SUSFS_TRY_UMOUNT
+    case CMD_SUSFS_ADD_TRY_UMOUNT:
+        error = susfs_add_try_umount((struct st_susfs_try_umount __user *)arg3);
+        break;
+#endif
+#ifdef CONFIG_KSU_SUSFS_SPOOF_UNAME
+    case CMD_SUSFS_SET_UNAME:
+        error = susfs_set_uname((struct st_susfs_uname __user *)arg3);
+        break;
+#endif
+#ifdef CONFIG_KSU_SUSFS_ENABLE_LOG
+    case CMD_SUSFS_ENABLE_LOG:
+        if (arg3 == 0 || arg3 == 1) {
+            susfs_set_log(arg3 == 1);
+            error = 0;
+        }
+        break;
+#endif
+    default:
+        return 0;
+    }
+
+    if (arg5 && copy_to_user((void __user *)arg5, &error, sizeof(error)))
+        return -EFAULT;
+    return 1;
+}
+#endif
+
+long __nocfi ksu_hook_prctl(int orig_nr, const struct pt_regs *regs)
+{
+#ifdef CONFIG_KSU_SUSFS
+    if ((unsigned int)PT_REGS_PARM1(regs) == KSU_INSTALL_MAGIC1) {
+        int handled = ksu_handle_susfs_prctl(PT_REGS_PARM2(regs), PT_REGS_PARM3(regs),
+                                             PT_REGS_PARM5(regs));
+        if (handled < 0)
+            return handled;
+        if (handled)
+            return 0;
+    }
+#endif
+    return ksu_syscall_table[orig_nr](regs);
+}
+'''
+              text += insert
+          path.write_text(text)
+
+          path = Path("drivers/kernelsu/hook/syscall_hook_manager.c")
+          text = path.read_text()
+          if "__NR_prctl" not in text:
+              text = text.replace(
+                  "    ksu_register_syscall_hook(__NR_faccessat, ksu_hook_faccessat);\n",
+                  "    ksu_register_syscall_hook(__NR_faccessat, ksu_hook_faccessat);\n"
+                  "    ksu_register_syscall_hook(__NR_prctl, ksu_hook_prctl);\n",
+              )
+              text = text.replace(
+                  "    ksu_unregister_syscall_hook(__NR_faccessat);\n",
+                  "    ksu_unregister_syscall_hook(__NR_faccessat);\n"
+                  "    ksu_unregister_syscall_hook(__NR_prctl);\n",
+              )
+              path.write_text(text)
+          PY
+
+          cat > drivers/kernelsu/selinux/rules.c <<'EOF'
+          #include <linux/errno.h>
+          #include <linux/printk.h>
+          #include <linux/types.h>
+          #include <linux/uaccess.h>
+          #include "selinux.h"
+
+          struct selinux_policy *backup_sepolicy;
+
+          void apply_kernelsu_rules(void)
+          {
+              pr_info("KernelSU: dynamic SELinux rules disabled on this 4.19 build\n");
+          }
+
+          int handle_sepolicy(void __user *user_data, u64 data_len)
+          {
+              (void)user_data;
+              (void)data_len;
+              return -EOPNOTSUPP;
+          }
+          EOF
+
+          cat > drivers/kernelsu/selinux/sepolicy.c <<'EOF'
+          #include <linux/err.h>
+          #include <linux/errno.h>
+          #include "sepolicy.h"
+
+          struct selinux_policy *ksu_dup_sepolicy(struct selinux_policy *old_pol) { (void)old_pol; return ERR_PTR(-EOPNOTSUPP); }
+          void ksu_destroy_sepolicy(struct selinux_policy *orig) { (void)orig; }
+          bool ksu_type(struct policydb *db, const char *name, const char *attr) { (void)db; (void)name; (void)attr; return false; }
+          bool ksu_attribute(struct policydb *db, const char *name) { (void)db; (void)name; return false; }
+          bool ksu_permissive(struct policydb *db, const char *type) { (void)db; (void)type; return false; }
+          bool ksu_enforce(struct policydb *db, const char *type) { (void)db; (void)type; return false; }
+          bool ksu_typeattribute(struct policydb *db, const char *type, const char *attr) { (void)db; (void)type; (void)attr; return false; }
+          bool ksu_exists(struct policydb *db, const char *type) { (void)db; (void)type; return false; }
+          bool ksu_allow(struct policydb *db, const char *src, const char *tgt, const char *cls, const char *perm) { (void)db; (void)src; (void)tgt; (void)cls; (void)perm; return false; }
+          bool ksu_deny(struct policydb *db, const char *src, const char *tgt, const char *cls, const char *perm) { (void)db; (void)src; (void)tgt; (void)cls; (void)perm; return false; }
+          bool ksu_auditallow(struct policydb *db, const char *src, const char *tgt, const char *cls, const char *perm) { (void)db; (void)src; (void)tgt; (void)cls; (void)perm; return false; }
+          bool ksu_dontaudit(struct policydb *db, const char *src, const char *tgt, const char *cls, const char *perm) { (void)db; (void)src; (void)tgt; (void)cls; (void)perm; return false; }
+          bool ksu_allowxperm(struct policydb *db, const char *src, const char *tgt, const char *cls, const char *range) { (void)db; (void)src; (void)tgt; (void)cls; (void)range; return false; }
+          bool ksu_auditallowxperm(struct policydb *db, const char *src, const char *tgt, const char *cls, const char *range) { (void)db; (void)src; (void)tgt; (void)cls; (void)range; return false; }
+          bool ksu_dontauditxperm(struct policydb *db, const char *src, const char *tgt, const char *cls, const char *range) { (void)db; (void)src; (void)tgt; (void)cls; (void)range; return false; }
+          bool ksu_type_transition(struct policydb *db, const char *src, const char *tgt, const char *cls, const char *def, const char *obj) { (void)db; (void)src; (void)tgt; (void)cls; (void)def; (void)obj; return false; }
+          bool ksu_type_change(struct policydb *db, const char *src, const char *tgt, const char *cls, const char *def) { (void)db; (void)src; (void)tgt; (void)cls; (void)def; return false; }
+          bool ksu_type_member(struct policydb *db, const char *src, const char *tgt, const char *cls, const char *def) { (void)db; (void)src; (void)tgt; (void)cls; (void)def; return false; }
+          bool ksu_genfscon(struct policydb *db, const char *fs_name, const char *path, const char *ctx) { (void)db; (void)fs_name; (void)path; (void)ctx; return false; }
+          EOF
+
+          cat > drivers/kernelsu/feature/selinux_hide.c <<'EOF'
+          #include <linux/init.h>
+          #include <linux/printk.h>
+          #include "selinux_hide.h"
+
+          void __init ksu_selinux_hide_init(void)
+          {
+              pr_info("selinux_hide: disabled on this 4.19 build\n");
+          }
+
+          void __exit ksu_selinux_hide_exit(void) {}
+          void ksu_selinux_hide_drop_backup_if_unused(void) {}
+          void ksu_selinux_hide_handle_second_stage(void) {}
+          void ksu_selinux_hide_handle_post_fs_data(void) {}
+          EOF
+
+          cat > drivers/kernelsu/feature/kernel_umount.c <<'EOF'
+          #include <linux/cred.h>
+          #include <linux/fs.h>
+          #include <linux/init.h>
+          #include <linux/mount.h>
+          #include <linux/namei.h>
+          #include <linux/nsproxy.h>
+          #include <linux/path.h>
+          #include <linux/printk.h>
+          #include <linux/sched.h>
+          #include <linux/slab.h>
+          #include <linux/types.h>
+
+          #include "feature/kernel_umount.h"
+          #include "ksu.h"
+          #include "policy/allowlist.h"
+          #include "policy/feature.h"
+          #include "selinux/selinux.h"
+
+          #ifdef CONFIG_KSU_SUSFS
+          #include <linux/susfs.h>
+          #endif
+
+          static bool ksu_kernel_umount_enabled = true;
+
+          static int kernel_umount_feature_get(u64 *value)
+          {
+              *value = ksu_kernel_umount_enabled ? 1 : 0;
+              return 0;
+          }
+
+          static int kernel_umount_feature_set(u64 value)
+          {
+              ksu_kernel_umount_enabled = value != 0;
+              pr_info("kernel_umount: set to %d\n", ksu_kernel_umount_enabled);
+              return 0;
+          }
+
+          static const struct ksu_feature_handler kernel_umount_handler = {
+              .feature_id = KSU_FEATURE_KERNEL_UMOUNT,
+              .name = "kernel_umount",
+              .get_handler = kernel_umount_feature_get,
+              .set_handler = kernel_umount_feature_set,
+          };
+
+          extern int path_umount(struct path *path, int flags);
+
+          void try_umount(const char *mnt, bool check_mnt, int flags)
+          {
+              struct path path;
+              int err = kern_path(mnt, 0, &path);
+              if (err)
+                  return;
+
+              if (check_mnt && path.dentry != path.mnt->mnt_root) {
+                  path_put(&path);
+                  return;
+              }
+
+              err = path_umount(&path, flags);
+              if (err)
+                  pr_info("umount %s failed: %d\n", mnt, err);
+          }
+
+          int ksu_handle_umount(uid_t old_uid, uid_t new_uid)
+          {
+              struct mount_entry *entry;
+              const struct cred *saved;
+
+              if (!ksu_kernel_umount_enabled || !ksu_cred)
+                  return 0;
+
+              if (!is_appuid(new_uid) && !is_isolated_process(new_uid))
+                  return 0;
+
+              if (!ksu_uid_should_umount(new_uid) && !is_isolated_process(new_uid))
+                  return 0;
+
+              if (!is_zygote(current_cred())) {
+                  pr_info("handle umount ignore non zygote child: %d\n", current->pid);
+                  return 0;
+              }
+
+              saved = override_creds(ksu_cred);
+
+          #ifdef CONFIG_KSU_SUSFS_TRY_UMOUNT
+              susfs_try_umount(new_uid);
+          #endif
+
+              down_read(&mount_list_lock);
+              list_for_each_entry(entry, &mount_list, list) {
+                  pr_info("%s: unmounting: %s flags: 0x%x\n", __func__, entry->umountable, entry->flags);
+                  try_umount(entry->umountable, true, entry->flags);
+              }
+              up_read(&mount_list_lock);
+
+              revert_creds(saved);
+              return 0;
+          }
+
+          void __init ksu_kernel_umount_init(void)
+          {
+              if (ksu_register_feature_handler(&kernel_umount_handler))
+                  pr_err("Failed to register kernel_umount feature handler\n");
+          }
+
+          void __exit ksu_kernel_umount_exit(void)
+          {
+              ksu_unregister_feature_handler(KSU_FEATURE_KERNEL_UMOUNT);
+          }
+          EOF
+
+          cat > drivers/kernelsu/runtime/ksud_integration.c <<'EOF'
+          #include <linux/init.h>
+          #include <linux/printk.h>
+          #include <linux/ptrace.h>
+          #include <linux/types.h>
+
+          #include "runtime/ksud.h"
+          #include "runtime/ksud_boot.h"
+
+          void ksu_execve_hook_ksud(const struct pt_regs *regs)
+          {
+          }
+
+          void ksu_stop_input_hook_runtime(void)
+          {
+          }
+
+          bool ksu_is_safe_mode(void)
+          {
+              return false;
+          }
+
+          void __init ksu_ksud_init(void)
+          {
+              pr_info("ksud integration disabled on munch manualhook build\n");
+          }
+
+          void __exit ksu_ksud_exit(void)
+          {
+          }
+          EOF
+
+          cat > drivers/kernelsu/supercall/supercall.c <<'EOF'
+          #include <linux/anon_inodes.h>
+          #include <linux/err.h>
+          #include <linux/fdtable.h>
+          #include <linux/file.h>
+          #include <linux/fs.h>
+          #include <linux/init.h>
+          #include <linux/kernel.h>
+          #include <linux/module.h>
+          #include <linux/sched.h>
+          #include <linux/slab.h>
+          #include <linux/string.h>
+          #include <linux/syscalls.h>
+          #include <linux/task_work.h>
+          #include <linux/uaccess.h>
+
+          #include "uapi/supercall.h"
+          #include "supercall/internal.h"
+          #include "klog.h"
+
+          #ifndef TWA_RESUME
+          #define TWA_RESUME 1
+          #endif
+
+          #define SUSFS_MAGIC 0xFAFAFAFA
+          #define CMD_SUSFS_SHOW_VERSION 0x555e1
+          #define CMD_SUSFS_SHOW_ENABLED_FEATURES 0x555e2
+
+          struct susfs_version_cmd {
+              char susfs_version[16];
+              int err;
+          };
+
+          struct susfs_features_cmd {
+              char enabled_features[8192];
+              int err;
+          };
+
+          struct ksu_install_fd_tw {
+              struct callback_head cb;
+              int __user *outp;
+          };
+
+          static int anon_ksu_release(struct inode *inode, struct file *filp)
+          {
+              pr_info("ksu fd released\n");
+              return 0;
+          }
+
+          static long anon_ksu_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
+          {
+              return ksu_supercall_handle_ioctl(cmd, (void __user *)arg);
+          }
+
+          static const struct file_operations anon_ksu_fops = {
+              .owner = THIS_MODULE,
+              .unlocked_ioctl = anon_ksu_ioctl,
+              .compat_ioctl = anon_ksu_ioctl,
+              .release = anon_ksu_release,
+          };
+
+          int ksu_install_fd(void)
+          {
+              struct file *filp;
+              int fd;
+
+              /*
+               * SukiSU manager launches libksud.so via exec. MIUI's app seccomp
+               * profile blocks the reboot supercall in that child process, so keep
+               * the manager driver fd inheritable and let libksud reuse it directly.
+               */
+              fd = get_unused_fd_flags(0);
+              if (fd < 0)
+                  return fd;
+
+              filp = anon_inode_getfile("[ksu_driver]", &anon_ksu_fops, NULL, O_RDWR);
+              if (IS_ERR(filp)) {
+                  put_unused_fd(fd);
+                  return PTR_ERR(filp);
+              }
+
+              fd_install(fd, filp);
+              pr_info("ksu fd installed: %d for pid %d\n", fd, current->pid);
+              return fd;
+          }
+
+          static void ksu_install_fd_tw_func(struct callback_head *cb)
+          {
+              struct ksu_install_fd_tw *tw = container_of(cb, struct ksu_install_fd_tw, cb);
+              int fd = ksu_install_fd();
+
+              if (copy_to_user(tw->outp, &fd, sizeof(fd))) {
+                  pr_err("install ksu fd reply err\n");
+                  if (fd >= 0)
+                      ksys_close(fd);
+              }
+              kfree(tw);
+          }
+
+          static int ksu_handle_susfs_reboot(unsigned int cmd, void __user *argp)
+          {
+          #ifdef CONFIG_KSU_SUSFS
+              if (cmd == CMD_SUSFS_SHOW_VERSION) {
+                  struct susfs_version_cmd out = { .susfs_version = "v1.4.2", .err = 0 };
+                  if (argp && copy_to_user(argp, &out, sizeof(out)))
+                      return -EFAULT;
+                  return 0;
+              }
+
+              if (cmd == CMD_SUSFS_SHOW_ENABLED_FEATURES) {
+                  struct susfs_features_cmd out = { .err = 0 };
+                  scnprintf(out.enabled_features, sizeof(out.enabled_features),
+                            "KSU_SUSFS "
+          #ifdef CONFIG_KSU_SUSFS_SUS_PATH
+                            "SUS_PATH "
+          #endif
+          #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
+                            "SUS_MOUNT "
+          #endif
+          #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
+                            "SUS_KSTAT "
+          #endif
+          #ifdef CONFIG_KSU_SUSFS_SUS_OVERLAYFS
+                            "SUS_OVERLAYFS "
+          #endif
+          #ifdef CONFIG_KSU_SUSFS_TRY_UMOUNT
+                            "TRY_UMOUNT "
+          #endif
+          #ifdef CONFIG_KSU_SUSFS_SPOOF_UNAME
+                            "SPOOF_UNAME "
+          #endif
+          #ifdef CONFIG_KSU_SUSFS_ENABLE_LOG
+                            "ENABLE_LOG "
+          #endif
+          #ifdef CONFIG_KPM
+                            "KPM "
+          #endif
+                            );
+                  if (argp && copy_to_user(argp, &out, sizeof(out)))
+                      return -EFAULT;
+                  return 0;
+              }
+          #endif
+              return 0;
+          }
+
+          int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void __user **argp)
+          {
+              struct ksu_install_fd_tw *tw;
+
+              if (magic1 == KSU_INSTALL_MAGIC1 && magic2 == SUSFS_MAGIC)
+                  return ksu_handle_susfs_reboot(cmd, *argp);
+
+              if (magic1 != KSU_INSTALL_MAGIC1 || magic2 != KSU_INSTALL_MAGIC2)
+                  return 0;
+
+              tw = kzalloc(sizeof(*tw), GFP_ATOMIC);
+              if (!tw)
+                  return 0;
+
+              tw->outp = (int __user *)*argp;
+              tw->cb.func = ksu_install_fd_tw_func;
+
+              if (task_work_add(current, &tw->cb, TWA_RESUME)) {
+                  kfree(tw);
+                  pr_warn("install fd add task_work failed\n");
+              }
+              return 0;
+          }
+
+          void __init ksu_supercalls_init(void)
+          {
+              ksu_supercall_dump_commands();
+              pr_info("manual reboot supercall hook enabled\n");
+          }
+
+          void __exit ksu_supercalls_exit(void)
+          {
+              ksu_supercall_cleanup_state();
+          }
+          EOF
+
+          tmp_ksu_init=$(mktemp)
+          printf "#ifndef MODULE_IMPORT_NS\n#define MODULE_IMPORT_NS(ns)\n#endif\n" > "$tmp_ksu_init"
+          cat drivers/kernelsu/core/init.c >> "$tmp_ksu_init"
+          mv "$tmp_ksu_init" drivers/kernelsu/core/init.c
+          patch_perl drivers/kernelsu/core/init.c 's@#include "manager/throne_tracker.h"\n@#include "manager/throne_tracker.h"\n#include "manager/manager_identity.h"\n@g'
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("drivers/kernelsu/core/init.c")
+          text = path.read_text()
+          if '#include <linux/susfs.h>' not in text:
+              text = text.replace(
+                  '#include "feature/uts_spoof.h"\n',
+                  '#include "feature/uts_spoof.h"\n'
+                  '#ifdef CONFIG_KSU_SUSFS\n'
+                  '#include <linux/susfs.h>\n'
+                  '#endif\n',
+              )
+          if "susfs_init();" not in text:
+              text = text.replace(
+                  "    ksu_supercalls_init();\n",
+                  "    ksu_supercalls_init();\n"
+                  "#ifdef CONFIG_KSU_SUSFS\n"
+                  "    susfs_init();\n"
+                  "#endif\n",
+                  1,
+              )
+          path.write_text(text)
+          PY
+          patch_perl drivers/kernelsu/core/init.c 's@\n        ksu_ksud_init\(\);@\n        pr_info("ksud init disabled on munch no-ksud test build\\n");\n        ksu_observer_init();\n        ksu_load_allow_list();\n        track_throne(false);\n        if (!ksu_is_manager_appid_valid()) {\n            ksu_set_manager_appid(10264);\n            pr_info("fallback manager appid set to 10264\\n");\n        }\n        ksu_boot_completed = true;@g'
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("init/main.c")
+          text = path.read_text()
+          old = "\tftrace_free_init_mem();\n\tfree_initmem();\n"
+          new = "\tftrace_free_init_mem();\n\tpr_err(\"munch_kinit: skipping free_initmem before mark_readonly\\n\");\n\t/* free_initmem(); */\n\tpr_err(\"munch_kinit: after skipped free_initmem before mark_readonly\\n\");\n"
+          if old not in text:
+              raise SystemExit("free_initmem anchor not found")
+          path.write_text(text.replace(old, new, 1))
+          PY
+          grep -n "skipping free_initmem" init/main.c
+
+          git clone "$ANYKERNEL_REPO" -b "$ANYKERNEL_BRANCH" --single-branch --depth=1 anykernel
+          sed -i '/device.name5=lmi/a device.name6=munch' anykernel/anykernel.sh
+
+          make $MAKE_ARGS vendor/munch_defconfig
+          scripts/config --file out/.config \
+            -d MODULES \
+            -d KPROBES \
+            -d KRETPROBES \
+            -e KSU \
+            -e KSU_MANUAL_SU \
+            -e KPM \
+            -e KSU_SUSFS \
+            -e KSU_SUSFS_SUS_PATH \
+            -e KSU_SUSFS_SUS_MOUNT \
+            -e KSU_SUSFS_SUS_KSTAT \
+            -e KSU_SUSFS_SUS_OVERLAYFS \
+            -e KSU_SUSFS_TRY_UMOUNT \
+            -e KSU_SUSFS_SPOOF_UNAME \
+            -e KSU_SUSFS_ENABLE_LOG \
+            -d KSU_SUSFS_SUS_SU \
+            -e KALLSYMS \
+            -e KALLSYMS_ALL \
+            --set-str STATIC_USERMODEHELPER_PATH /system/bin/micd \
+            -e PERF_CRITICAL_RT_TASK \
+            -e SF_BINDER \
+            -e OVERLAY_FS \
+            -d DEBUG_FS \
+            -e MIGT \
+            -e MIGT_ENERGY_MODEL \
+            -e MIHW \
+            -e PACKAGE_RUNTIME_INFO \
+            -e BINDER_OPT \
+            -e KPERFEVENTS \
+            -e MILLET \
+            -e PERF_HUMANTASK \
+            -e LTO \
+            -e LTO_CLANG \
+            -e LTO_CLANG_FULL \
+            -d LTO_CLANG_THIN \
+            -d LTO_NONE \
+            -d LOCALVERSION_AUTO \
+            -e XIAOMI_MIUI \
+            -e SERIAL_MSM_GENI_CONSOLE \
+            --set-val LITTLE_CPU_MASK 15 \
+            --set-val BIG_CPU_MASK 112 \
+            --set-val PRIME_CPU_MASK 128 \
+            -d CFI_CLANG \
+            -d SHADOW_CALL_STACK \
+            -d MI_MEMORY_SYSFS \
+            -e TASK_DELAY_ACCT \
+            -e MIUI_ZRAM_MEMORY_TRACKING \
+            -d CONFIG_MODULE_SIG_SHA512 \
+            -d CONFIG_MODULE_SIG_HASH \
+            -e MI_FRAGMENTION \
+            -e PERF_HELPER \
+            -e BOOTUP_RECLAIM \
+            -e MI_RECLAIM \
+            -e RTMM
+          make $MAKE_ARGS olddefconfig
+
+          echo "[final SukiSU config]"
+          grep -E 'CONFIG_LOCALVERSION|CONFIG_MODULES|CONFIG_KPROBES|CONFIG_KRETPROBES|CONFIG_KSU|CONFIG_KPM|CONFIG_KSU_SUSFS|CONFIG_KALLSYMS|CONFIG_LITTLE_CPU_MASK|CONFIG_BIG_CPU_MASK|CONFIG_PRIME_CPU_MASK|CONFIG_SERIAL_MSM_GENI_CONSOLE|CONFIG_BUILD_ARM64|CONFIG_LTO|CONFIG_CFI_CLANG|CONFIG_SHADOW_CALL_STACK' out/.config || true
+          grep -q '^CONFIG_KSU=y' out/.config
+          grep -q '^CONFIG_KPM=y' out/.config
+          grep -q '^CONFIG_KSU_SUSFS=y' out/.config
+          grep -q '^CONFIG_KSU_SUSFS_SUS_PATH=y' out/.config
+          grep -q '^CONFIG_KSU_SUSFS_SUS_MOUNT=y' out/.config
+          grep -q '^CONFIG_KSU_SUSFS_SUS_KSTAT=y' out/.config
+          grep -q '^CONFIG_KSU_SUSFS_SUS_OVERLAYFS=y' out/.config
+          grep -q '^CONFIG_KSU_SUSFS_TRY_UMOUNT=y' out/.config
+          grep -q '^CONFIG_KSU_SUSFS_SPOOF_UNAME=y' out/.config
+          grep -q '^CONFIG_KSU_SUSFS_ENABLE_LOG=y' out/.config
+          ! grep -q '^CONFIG_KSU_SUSFS_SUS_SU=y' out/.config
+          grep -q '^CONFIG_KALLSYMS_ALL=y' out/.config
+          grep -q '^CONFIG_SERIAL_MSM_GENI_CONSOLE=y' out/.config
+          grep -q '^# CONFIG_MODULES is not set' out/.config
+          ! grep -q '^CONFIG_KPROBES=y' out/.config
+          grep -q '^CONFIG_LITTLE_CPU_MASK=15$' out/.config
+          grep -q '^CONFIG_BIG_CPU_MASK=112$' out/.config
+          grep -q '^CONFIG_PRIME_CPU_MASK=128$' out/.config
+          grep -q '^CONFIG_LTO_CLANG=y' out/.config
+          grep -q '^CONFIG_LTO_CLANG_FULL=y' out/.config
+
+          make $MAKE_ARGS -j"$(nproc)" Image.gz-dtb
+          test -f out/arch/arm64/boot/Image
+          test -f out/arch/arm64/boot/Image.gz-dtb
+
+          rm -rf anykernel/kernels
+          mkdir -p anykernel/kernels
+          cp out/arch/arm64/boot/Image.gz-dtb anykernel/kernels/Image
+
+          cp out/arch/arm64/boot/Image "$GITHUB_WORKSPACE/sukisu-output/Image"
+          cp out/arch/arm64/boot/Image.gz-dtb "$GITHUB_WORKSPACE/sukisu-output/Image.gz-dtb"
+          cp out/.config "$GITHUB_WORKSPACE/sukisu-output/kernel.config"
+
+          (
+            cd anykernel
+            ZIP_FILENAME="Kernel_MIUI_${DEVICE}_FusionX-skipfreeinit-manualhook-kpm-susfs_SukiSU-Ultra-v4.1.3_$(date +'%Y%m%d_%H%M%S')_anykernel3_$(git rev-parse --short=8 HEAD).zip"
+            zip -r9 "$ZIP_FILENAME" ./* -x .git .gitignore out/ ./*.zip
+            mv "$ZIP_FILENAME" "$GITHUB_WORKSPACE/sukisu-output/"
+          )
+
+          {
+            echo "device=${DEVICE}"
+            echo "rom=MIUI"
+            echo "root=SukiSU Ultra"
+            echo "sukisu_ref=${SUKISU_REF}"
+            echo "sukisu_commit=${SUKISU_COMMIT}"
+            echo "susfs_ref=${SUSFS_REF}"
+            echo "susfs_commit=${SUSFS_COMMIT}"
+            echo "kernel_repo=${KERNEL_REPO}"
+            echo "kernel_branch=${KERNEL_BRANCH}"
+            echo "kernel_commit=$(git rev-parse HEAD)"
+            echo "anykernel_repo=${ANYKERNEL_REPO}"
+            echo "anykernel_branch=${ANYKERNEL_BRANCH}"
+            echo "anykernel_commit=$(git -C anykernel rev-parse HEAD)"
+            strings out/arch/arm64/boot/Image | grep -m1 'Linux version' || true
+          } | tee "$GITHUB_WORKSPACE/sukisu-output/build-info.txt"
+
+          sha256sum "$GITHUB_WORKSPACE"/sukisu-output/* | tee "$GITHUB_WORKSPACE/sukisu-output/SHA256SUMS"
+
+      - name: Upload artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: munch-sukisu-ultra-v413-fusionx-skipfreeinit
+          path: sukisu-output/*
+          retention-days: 7
+
+      - name: Publish output branch
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euxo pipefail
+          OUT_BRANCH="artifact-munch-sukisu-ultra-v413-fusionx-${GITHUB_RUN_ID}"
+          OUT_DIR="munch-sukisu-ultra-v413-fusionx-${GITHUB_RUN_ID}"
+          if [ ! -d sukisu-output ]; then
+            mkdir -p sukisu-output
+            echo "sukisu-output was not created before failure" > sukisu-output/build-step.log
+          fi
+          mkdir -p publish-repo "$OUT_DIR"
+          cp -a sukisu-output/. "$OUT_DIR/"
+          cd publish-repo
+          git init
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git checkout -b "$OUT_BRANCH"
+          cp -a "../$OUT_DIR" .
+          git add .
+          git commit -m "Publish munch SukiSU Ultra v4.1.3 artifact ${GITHUB_RUN_ID}"
+          git remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push -f origin "$OUT_BRANCH"
+          echo "output_branch=${OUT_BRANCH}" >> "$GITHUB_STEP_SUMMARY"
