@@ -80,7 +80,7 @@ jobs:
           for tool in ld.lld llvm-ar llvm-nm llvm-objcopy llvm-objdump llvm-readelf llvm-strip; do
             test -x "$TOOLCHAIN/$tool"
           done
-          MAKE_ARGS="ARCH=arm64 SUBARCH=arm64 O=out CC=$TOOLCHAIN/clang LD=$TOOLCHAIN/ld.lld AR=$TOOLCHAIN/llvm-ar NM=$TOOLCHAIN/llvm-nm OBJCOPY=$TOOLCHAIN/llvm-objcopy OBJDUMP=$TOOLCHAIN/llvm-objdump READELF=$TOOLCHAIN/llvm-readelf STRIP=$TOOLCHAIN/llvm-strip CROSS_COMPILE=$TOOLCHAIN/aarch64-linux-gnu- CROSS_COMPILE_ARM32=$ARM32_WRAP/arm-linux-gnueabi- CROSS_COMPILE_COMPAT=$ARM32_WRAP/arm-linux-gnueabi- CLANG_TRIPLE=aarch64-linux-gnu-"
+          MAKE_ARGS="ARCH=arm64 SUBARCH=arm64 O=out CC=$TOOLCHAIN/clang LD=$TOOLCHAIN/ld.lld AR=$TOOLCHAIN/llvm-ar NM=$TOOLCHAIN/llvm-nm OBJCOPY=$TOOLCHAIN/llvm-objcopy OBJDUMP=$TOOLCHAIN/llvm-objdump READELF=$TOOLCHAIN/llvm-readelf STRIP=$TOOLCHAIN/llvm-strip CROSS_COMPILE=$TOOLCHAIN/aarch64-linux-gnu- CROSS_COMPILE_ARM32=$ARM32_WRAP/arm-linux-gnueabi- CROSS_COMPILE_COMPAT=$ARM32_WRAP/arm-linux-gnueabi- CLANG_TRIPLE=aarch64-linux-gnu- KSU_MANAGER_PACKAGE=com.sukisu.ultra"
 
           echo "[kernel source]"
           git rev-parse HEAD
@@ -403,7 +403,7 @@ jobs:
           printf "#ifndef MODULE_IMPORT_NS\n#define MODULE_IMPORT_NS(ns)\n#endif\n" > "$tmp_ksu_init"
           cat drivers/kernelsu/core/init.c >> "$tmp_ksu_init"
           mv "$tmp_ksu_init" drivers/kernelsu/core/init.c
-          patch_perl drivers/kernelsu/core/init.c 's@\n        ksu_ksud_init\(\);@\n        pr_info("ksud init disabled on munch no-ksud test build\\n");\n        ksu_observer_init();\n        ksu_load_allow_list();\n        ksu_boot_completed = true;@g'
+          patch_perl drivers/kernelsu/core/init.c 's@\n        ksu_ksud_init\(\);@\n        pr_info("ksud init disabled on munch no-ksud test build\\n");\n        ksu_observer_init();\n        ksu_load_allow_list();\n        track_throne(false);\n        ksu_boot_completed = true;@g'
 
           python3 - <<'PY'
           from pathlib import Path
