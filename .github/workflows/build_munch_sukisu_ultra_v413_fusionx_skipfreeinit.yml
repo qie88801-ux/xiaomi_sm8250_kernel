@@ -208,6 +208,73 @@ jobs:
           patch_perl drivers/kernelsu/manager/pkg_observer.c 's@#include <linux/version.h>\n@#include <linux/version.h>\n#include <linux/string.h>\n@g; s@static const struct fsnotify_ops ksu_ops = \{\n    \.handle_inode_event = ksu_handle_inode_event,\n\};@static int ksu_handle_event(struct fsnotify_group *group, struct inode *inode, u32 mask, const void *data,\n                            int data_type, const unsigned char *file_name, u32 cookie,\n                            struct fsnotify_iter_info *iter_info)\n{\n    struct qstr qname;\n\n    (void)group;\n    (void)data;\n    (void)data_type;\n    (void)iter_info;\n\n    if (!file_name)\n        return 0;\n\n    qname.name = file_name;\n    qname.len = strlen(file_name);\n    qname.hash = 0;\n    return ksu_handle_inode_event(NULL, mask, inode, NULL, &qname, cookie);\n}\n\nstatic const struct fsnotify_ops ksu_ops = {\n    .handle_event = ksu_handle_event,\n};@g'
           patch_perl drivers/kernelsu/policy/allowlist.c 's@#include <linux/task_work.h>\n@#include <linux/task_work.h>\n#include <linux/sched/task.h>\n#ifndef TWA_RESUME\n#define TWA_RESUME 1\n#endif\n#ifndef fallthrough\n#define fallthrough do {} while (0)\n#endif\n@g'
           patch_perl drivers/kernelsu/hook/setuid_hook.c 's@#include "manager/manager_identity.h"\n@#include "manager/manager_identity.h"\n#include "manager/throne_tracker.h"\n@g; s@(\nint ksu_handle_setresuid\(uid_t old_uid, uid_t new_uid\)\n\{\n)@$1    if (!ksu_is_manager_appid_valid()) {\n        track_throne(false);\n    }\n\n@g'
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("drivers/kernelsu/hook/setuid_hook.c")
+          text = path.read_text()
+          helper = (
+              "static void ksu_disable_manager_seccomp(void)\n"
+              "{\n"
+              "    struct task_struct *fake;\n"
+              "\n"
+              "    if (current->seccomp.mode == 0 && !current->seccomp.filter) {\n"
+              "        return;\n"
+              "    }\n"
+              "\n"
+              "    fake = kmalloc(sizeof(*fake), GFP_KERNEL);\n"
+              "    if (!fake) {\n"
+              "        pr_warn(\"failed to alloc fake task_struct for manager seccomp disable\\n\");\n"
+              "        return;\n"
+              "    }\n"
+              "\n"
+              "    spin_lock_irq(&current->sighand->siglock);\n"
+              "#if defined(CONFIG_GENERIC_ENTRY) && LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)\n"
+              "    clear_syscall_work(SECCOMP);\n"
+              "#else\n"
+              "    clear_thread_flag(TIF_SECCOMP);\n"
+              "#endif\n"
+              "    memcpy(fake, current, sizeof(*fake));\n"
+              "    current->seccomp.mode = 0;\n"
+              "    current->seccomp.filter = NULL;\n"
+              "    spin_unlock_irq(&current->sighand->siglock);\n"
+              "\n"
+              "    put_seccomp_filter(fake);\n"
+              "    kfree(fake);\n"
+              "    pr_info(\"disabled seccomp for manager pid %d\\n\", current->pid);\n"
+              "}\n"
+              "\n"
+          )
+          marker = "int ksu_handle_setresuid(uid_t old_uid, uid_t new_uid)\n"
+          if marker not in text:
+              raise SystemExit("setuid hook function anchor not found")
+          text = text.replace(marker, helper + marker, 1)
+          old = (
+              "    if (unlikely(is_uid_manager(new_uid))) {\n"
+              "        spin_lock_irq(&current->sighand->siglock);\n"
+              "        ksu_seccomp_allow_cache(current->seccomp.filter, __NR_reboot);\n"
+              "        ksu_set_task_tracepoint_flag(current);\n"
+              "        spin_unlock_irq(&current->sighand->siglock);\n"
+              "\n"
+              "        pr_info(\"install fd for manager: %d\\n\", new_uid);\n"
+              "        ksu_install_fd();\n"
+              "        return 0;\n"
+              "    }\n"
+          )
+          new = (
+              "    if (unlikely(is_uid_manager(new_uid))) {\n"
+              "        ksu_disable_manager_seccomp();\n"
+              "        ksu_set_task_tracepoint_flag(current);\n"
+              "\n"
+              "        pr_info(\"install fd for manager: %d\\n\", new_uid);\n"
+              "        ksu_install_fd();\n"
+              "        return 0;\n"
+              "    }\n"
+          )
+          if old not in text:
+              raise SystemExit("manager setuid branch anchor not found")
+          path.write_text(text.replace(old, new, 1))
+          PY
           patch_perl drivers/kernelsu/policy/app_profile.c 's@void seccomp_filter_release\(struct task_struct \*tsk\);\n@@g; s@\n    atomic_set\(&current->seccomp\.filter_count, 0\);@@g; s@seccomp_filter_release\(fake\);@put_seccomp_filter(fake);@g'
           patch_perl drivers/kernelsu/runtime/ksud_integration.c 's@#include <linux/uaccess.h>\n@#include <linux/uaccess.h>\n#ifndef strncpy_from_user_nofault\n#define strncpy_from_user_nofault strncpy_from_user\n#endif\n#ifndef copy_from_user_nofault\n#define copy_from_user_nofault copy_from_user\n#endif\n#ifndef copy_to_user_nofault\n#define copy_to_user_nofault copy_to_user\n#endif\n@g'
           patch_perl drivers/kernelsu/selinux/selinux.c 's@#include "objsec.h"\n@#include "objsec.h"\n#ifndef selinux_cred\n#define selinux_cred(cred) ((struct task_security_struct *)((cred)->security))\n#endif\n@g'
