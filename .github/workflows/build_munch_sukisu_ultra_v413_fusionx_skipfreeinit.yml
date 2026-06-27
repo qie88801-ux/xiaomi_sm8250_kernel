@@ -136,6 +136,7 @@ jobs:
           patch_perl drivers/kernelsu/sulog/event.c 's@#include <linux/minmax.h>@#include <linux/kernel.h>@g; s@#include <linux/uaccess.h>\n@#include <linux/uaccess.h>\n#ifndef strncpy_from_user_nofault\n#define strncpy_from_user_nofault strncpy_from_user\n#endif\n@g'
           patch_perl drivers/kernelsu/supercall/dispatch.c 's@#include <linux/version.h>\n@#include <linux/version.h>\n#include <linux/sched/task.h>\n#include <linux/sched/signal.h>\n#include <linux/pid.h>\n@g'
           patch_perl drivers/kernelsu/supercall/supercall.c 's@#include <linux/task_work.h>\n@#include <linux/task_work.h>\n#ifndef TWA_RESUME\n#define TWA_RESUME 1\n#endif\n@g'
+          patch_perl drivers/kernelsu/hook/syscall_event_bridge.c 's@DEFINE_STATIC_KEY_TRUE\(ksud_execve_key\);@DEFINE_STATIC_KEY_FALSE(ksud_execve_key);@g'
 
           cat > drivers/kernelsu/selinux/rules.c <<'EOF'
           #include <linux/errno.h>
@@ -225,6 +226,7 @@ jobs:
           printf "#ifndef MODULE_IMPORT_NS\n#define MODULE_IMPORT_NS(ns)\n#endif\n" > "$tmp_ksu_init"
           cat drivers/kernelsu/core/init.c >> "$tmp_ksu_init"
           mv "$tmp_ksu_init" drivers/kernelsu/core/init.c
+          patch_perl drivers/kernelsu/core/init.c 's@\n        ksu_ksud_init\(\);@\n        pr_info("ksud init disabled on munch no-ksud test build\\n");\n        ksu_observer_init();\n        ksu_load_allow_list();\n        ksu_boot_completed = true;@g'
 
           python3 - <<'PY'
           from pathlib import Path
@@ -316,7 +318,7 @@ jobs:
 
           (
             cd anykernel
-            ZIP_FILENAME="Kernel_MIUI_${DEVICE}_FusionX-skipfreeinit-nolto_SukiSU-Ultra-v4.1.3_$(date +'%Y%m%d_%H%M%S')_anykernel3_$(git rev-parse --short=8 HEAD).zip"
+            ZIP_FILENAME="Kernel_MIUI_${DEVICE}_FusionX-skipfreeinit-nolto-noksud_SukiSU-Ultra-v4.1.3_$(date +'%Y%m%d_%H%M%S')_anykernel3_$(git rev-parse --short=8 HEAD).zip"
             zip -r9 "$ZIP_FILENAME" ./* -x .git .gitignore out/ ./*.zip
             mv "$ZIP_FILENAME" "$GITHUB_WORKSPACE/sukisu-output/"
           )
