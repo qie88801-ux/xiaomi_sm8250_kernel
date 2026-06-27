@@ -1,0 +1,398 @@
++ mkdir -p /home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/kernel_workspace
++ cd /home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/kernel_workspace
++ git clone https://github.com/SenseiiX/fusionX_sm8250 -b stable-next --depth=1 --recurse-submodules --shallow-submodules android_kernel
+Cloning into 'android_kernel'...
+Updating files:  22% (16600/73011)Updating files:  23% (16793/73011)Updating files:  24% (17523/73011)Updating files:  25% (18253/73011)Updating files:  26% (18983/73011)Updating files:  27% (19713/73011)Updating files:  28% (20444/73011)Updating files:  29% (21174/73011)Updating files:  30% (21904/73011)Updating files:  31% (22634/73011)Updating files:  32% (23364/73011)Updating files:  33% (24094/73011)Updating files:  34% (24824/73011)Updating files:  35% (25554/73011)Updating files:  36% (26284/73011)Updating files:  37% (27015/73011)Updating files:  38% (27745/73011)Updating files:  38% (27822/73011)Updating files:  39% (28475/73011)Updating files:  40% (29205/73011)Updating files:  41% (29935/73011)Updating files:  42% (30665/73011)Updating files:  43% (31395/73011)Updating files:  44% (32125/73011)Updating files:  45% (32855/73011)Updating files:  46% (33586/73011)Updating files:  47% (34316/73011)Updating files:  48% (35046/73011)Updating files:  49% (35776/73011)Updating files:  50% (36506/73011)Updating files:  51% (37236/73011)Updating files:  52% (37966/73011)Updating files:  52% (38641/73011)Updating files:  53% (38696/73011)Updating files:  54% (39426/73011)Updating files:  55% (40157/73011)Updating files:  56% (40887/73011)Updating files:  57% (41617/73011)Updating files:  58% (42347/73011)Updating files:  59% (43077/73011)Updating files:  60% (43807/73011)Updating files:  61% (44537/73011)Updating files:  62% (45267/73011)Updating files:  63% (45997/73011)Updating files:  64% (46728/73011)Updating files:  64% (47164/73011)Updating files:  65% (47458/73011)Updating files:  66% (48188/73011)Updating files:  67% (48918/73011)Updating files:  68% (49648/73011)Updating files:  69% (50378/73011)Updating files:  70% (51108/73011)Updating files:  71% (51838/73011)Updating files:  72% (52568/73011)Updating files:  73% (53299/73011)Updating files:  74% (54029/73011)Updating files:  75% (54759/73011)Updating files:  76% (55489/73011)Updating files:  76% (56123/73011)Updating files:  77% (56219/73011)Updating files:  78% (56949/73011)Updating files:  79% (57679/73011)Updating files:  80% (58409/73011)Updating files:  81% (59139/73011)Updating files:  82% (59870/73011)Updating files:  83% (60600/73011)Updating files:  84% (61330/73011)Updating files:  85% (62060/73011)Updating files:  86% (62790/73011)Updating files:  87% (63520/73011)Updating files:  88% (64250/73011)Updating files:  89% (64980/73011)Updating files:  90% (65710/73011)Updating files:  91% (66441/73011)Updating files:  92% (67171/73011)Updating files:  93% (67901/73011)Updating files:  93% (68387/73011)Updating files:  94% (68631/73011)Updating files:  95% (69361/73011)Updating files:  96% (70091/73011)Updating files:  97% (70821/73011)Updating files:  98% (71551/73011)Updating files:  99% (72281/73011)Updating files: 100% (73011/73011)Updating files: 100% (73011/73011), done.
+Submodule 'KernelSU' (https://github.com/rifsxd/KernelSU-Next) registered for path 'KernelSU-Next'
+Cloning into '/home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/kernel_workspace/android_kernel/KernelSU-Next'...
+From https://github.com/rifsxd/KernelSU-Next
+ * branch            fb7a01b2ad97cbe80cbcb39fa435e1133beadaae -> FETCH_HEAD
+Submodule path 'KernelSU-Next': checked out 'fb7a01b2ad97cbe80cbcb39fa435e1133beadaae'
++ cd android_kernel
++ git submodule update --init --recursive --depth=1
++ echo '[Remove unsupported LLVM optimization flags for Proton clang 13]'
+[Remove unsupported LLVM optimization flags for Proton clang 13]
++ sed -i -E '/regalloc-enable-advisor|enable-ml-inliner|fsplit-machine-functions/d' Makefile
++ TOOLCHAIN=/home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/proton-clang/proton-clang-20210522/bin
++ ARM32_WRAP=/home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/arm32-toolchain-wrapper
++ mkdir -p /home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/arm32-toolchain-wrapper
++ for tool in as ld objcopy elfedit gcc
++ ln -sf /usr/bin/arm-linux-gnueabi-as /home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/arm32-toolchain-wrapper/arm-linux-gnueabi-as
++ for tool in as ld objcopy elfedit gcc
++ ln -sf /usr/bin/arm-linux-gnueabi-ld /home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/arm32-toolchain-wrapper/arm-linux-gnueabi-ld
++ for tool in as ld objcopy elfedit gcc
++ ln -sf /usr/bin/arm-linux-gnueabi-objcopy /home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/arm32-toolchain-wrapper/arm-linux-gnueabi-objcopy
++ for tool in as ld objcopy elfedit gcc
++ ln -sf /usr/bin/arm-linux-gnueabi-elfedit /home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/arm32-toolchain-wrapper/arm-linux-gnueabi-elfedit
++ for tool in as ld objcopy elfedit gcc
++ ln -sf /usr/bin/arm-linux-gnueabi-gcc /home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/arm32-toolchain-wrapper/arm-linux-gnueabi-gcc
++ export PATH=/usr/lib/ccache:/usr/bin:/home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/proton-clang/proton-clang-20210522/bin:/snap/bin:/home/runner/.local/bin:/opt/pipx_bin:/home/runner/.cargo/bin:/home/runner/.config/composer/vendor/bin:/usr/local/.ghcup/bin:/home/runner/.dotnet/tools:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin
++ PATH=/usr/lib/ccache:/usr/bin:/home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/proton-clang/proton-clang-20210522/bin:/snap/bin:/home/runner/.local/bin:/opt/pipx_bin:/home/runner/.cargo/bin:/home/runner/.config/composer/vendor/bin:/usr/local/.ghcup/bin:/home/runner/.dotnet/tools:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin
++ export ARCH=arm64
++ ARCH=arm64
++ export SUBARCH=arm64
++ SUBARCH=arm64
++ export CCACHE_DIR=/home/runner/.cache/ccache_munch_sukisu_v413
++ CCACHE_DIR=/home/runner/.cache/ccache_munch_sukisu_v413
++ MAKE_ARGS='ARCH=arm64 SUBARCH=arm64 O=out CC=/home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/proton-clang/proton-clang-20210522/bin/clang CROSS_COMPILE=/home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/proton-clang/proton-clang-20210522/bin/aarch64-linux-gnu- CROSS_COMPILE_ARM32=/home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/arm32-toolchain-wrapper/arm-linux-gnueabi- CROSS_COMPILE_COMPAT=/home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/arm32-toolchain-wrapper/arm-linux-gnueabi- CLANG_TRIPLE=aarch64-linux-gnu-'
++ echo '[kernel source]'
+[kernel source]
++ git rev-parse HEAD
+d69c7ed3e9baaf7447327226d9e0b43e66ce14e4
++ grep -E '^(VERSION|PATCHLEVEL|SUBLEVEL|EXTRAVERSION) =' Makefile
+VERSION = 4
+PATCHLEVEL = 19
+SUBLEVEL = 337
+EXTRAVERSION =
++ echo '[clang]'
+[clang]
++ /home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/proton-clang/proton-clang-20210522/bin/clang --version
+Proton clang version 13.0.0 (https://github.com/llvm/llvm-project b4fd512c36ca344a3ff69350219e8b0a67e9472a)
+Target: x86_64-unknown-linux-gnu
+Thread model: posix
+InstalledDir: /home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/proton-clang/proton-clang-20210522/bin
++ rm -f drivers/kernelsu
++ git clone https://github.com/SukiSU-Ultra/SukiSU-Ultra.git -b v4.1.3 --depth=1 KernelSU
+Cloning into 'KernelSU'...
+Note: switching to '0ca744a88835144c58d8256ebb32c279edabfcde'.
+
+You are in 'detached HEAD' state. You can look around, make experimental
+changes and commit them, and you can discard any commits you make in this
+state without impacting any branches by switching back to a branch.
+
+If you want to create a new branch to retain commits you create, you may
+do so (now or later) by using -c with the switch command. Example:
+
+  git switch -c <new-branch-name>
+
+Or undo this operation with:
+
+  git switch -
+
+Turn off this advice by setting config variable advice.detachedHead to false
+
++ ln -s ../KernelSU/kernel drivers/kernelsu
+++ git -C KernelSU rev-parse HEAD
++ test 0ca744a88835144c58d8256ebb32c279edabfcde = 0ca744a88835144c58d8256ebb32c279edabfcde
++ git -C KernelSU describe --tags --always
+v4.1.3
++ test -f drivers/kernelsu/Kconfig
++ test -f drivers/kernelsu/Kbuild
++ grep -q 'source "drivers/kernelsu/Kconfig"' drivers/Kconfig
++ grep -q 'obj-y[[:space:]]*+=[[:space:]]*kernelsu/' drivers/Makefile
++ sed -i 's@obj-y[[:space:]]*+=[[:space:]]*kernelsu/@obj-$(CONFIG_KSU) += kernelsu/@' drivers/Makefile
++ grep -q 'obj-$(CONFIG_KSU)[[:space:]]*+=[[:space:]]*kernelsu/' drivers/Makefile
++ echo '[SukiSU integration]'
+[SukiSU integration]
++ grep -n kernelsu drivers/Kconfig drivers/Makefile
+drivers/Kconfig:240:source "drivers/kernelsu/Kconfig"
+drivers/Makefile:197:obj-$(CONFIG_KSU) += kernelsu/
++ grep -q ksu_vfs_read_hook fs/read_write.c
++ for legacy_hook_file in fs/read_write.c fs/exec.c drivers/input/input.c drivers/tty/pty.c
++ patch_perl fs/read_write.c 's@#ifdef CONFIG_KSU@#if 0 /* disabled legacy KernelSU hook */@g'
++ local target=fs/read_write.c
++ shift
++ '[' -f fs/read_write.c ']'
++ echo '[patch] fs/read_write.c'
+[patch] fs/read_write.c
++ perl -0pi -e 's@#ifdef CONFIG_KSU@#if 0 /* disabled legacy KernelSU hook */@g' fs/read_write.c
++ for legacy_hook_file in fs/read_write.c fs/exec.c drivers/input/input.c drivers/tty/pty.c
++ patch_perl fs/exec.c 's@#ifdef CONFIG_KSU@#if 0 /* disabled legacy KernelSU hook */@g'
++ local target=fs/exec.c
++ shift
++ '[' -f fs/exec.c ']'
++ echo '[patch] fs/exec.c'
+[patch] fs/exec.c
++ perl -0pi -e 's@#ifdef CONFIG_KSU@#if 0 /* disabled legacy KernelSU hook */@g' fs/exec.c
++ for legacy_hook_file in fs/read_write.c fs/exec.c drivers/input/input.c drivers/tty/pty.c
++ patch_perl drivers/input/input.c 's@#ifdef CONFIG_KSU@#if 0 /* disabled legacy KernelSU hook */@g'
++ local target=drivers/input/input.c
++ shift
++ '[' -f drivers/input/input.c ']'
++ echo '[patch] drivers/input/input.c'
+[patch] drivers/input/input.c
++ perl -0pi -e 's@#ifdef CONFIG_KSU@#if 0 /* disabled legacy KernelSU hook */@g' drivers/input/input.c
++ for legacy_hook_file in fs/read_write.c fs/exec.c drivers/input/input.c drivers/tty/pty.c
++ patch_perl drivers/tty/pty.c 's@#ifdef CONFIG_KSU@#if 0 /* disabled legacy KernelSU hook */@g'
++ local target=drivers/tty/pty.c
++ shift
++ '[' -f drivers/tty/pty.c ']'
++ echo '[patch] drivers/tty/pty.c'
+[patch] drivers/tty/pty.c
++ perl -0pi -e 's@#ifdef CONFIG_KSU@#if 0 /* disabled legacy KernelSU hook */@g' drivers/tty/pty.c
++ find -L drivers/kernelsu -name '*.c' -type f -exec sed -i 's/access_ok(/access_ok(VERIFY_READ, /g' '{}' +
++ patch_perl drivers/kernelsu/feature/sucompat.c 's@#include <linux/pgtable.h>@#include <asm/pgtable.h>@g; s@#include <linux/uaccess.h>\n@#include <linux/uaccess.h>\n#ifndef strncpy_from_user_nofault\n#define strncpy_from_user_nofault strncpy_from_user\n#endif\n@g'
++ local target=drivers/kernelsu/feature/sucompat.c
++ shift
++ '[' -f drivers/kernelsu/feature/sucompat.c ']'
++ echo '[patch] drivers/kernelsu/feature/sucompat.c'
+[patch] drivers/kernelsu/feature/sucompat.c
++ perl -0pi -e 's@#include <linux/pgtable.h>@#include <asm/pgtable.h>@g; s@#include <linux/uaccess.h>\n@#include <linux/uaccess.h>\n#ifndef strncpy_from_user_nofault\n#define strncpy_from_user_nofault strncpy_from_user\n#endif\n@g' drivers/kernelsu/feature/sucompat.c
++ patch_perl drivers/kernelsu/hook/arm64/patch_memory.c 's@#include "linux/uaccess.h"\n@#include "linux/uaccess.h"\n#ifndef copy_to_kernel_nofault\n#define copy_to_kernel_nofault probe_kernel_write\n#endif\n@g'
++ local target=drivers/kernelsu/hook/arm64/patch_memory.c
++ shift
++ '[' -f drivers/kernelsu/hook/arm64/patch_memory.c ']'
++ echo '[patch] drivers/kernelsu/hook/arm64/patch_memory.c'
+[patch] drivers/kernelsu/hook/arm64/patch_memory.c
++ perl -0pi -e 's@#include "linux/uaccess.h"\n@#include "linux/uaccess.h"\n#ifndef copy_to_kernel_nofault\n#define copy_to_kernel_nofault probe_kernel_write\n#endif\n@g' drivers/kernelsu/hook/arm64/patch_memory.c
++ patch_perl drivers/kernelsu/infra/file_wrapper.c 's@#include <linux/mount.h>\n@#include <linux/mount.h>\n#ifndef security_inode_init_security_anon\n#define security_inode_init_security_anon(inode, qname, context_inode) ((void)(inode), (void)(qname), (void)(context_inode), 0)\n#endif\n#ifndef selinux_inode\n#define selinux_inode(inode) ((struct inode_security_struct *)((inode)->i_security))\n#endif\n@g; s@#if LINUX_VERSION_CODE >= KERNEL_VERSION\(6, 1, 0\)\nstatic int ksu_wrapper_iopoll.*?#endif\n\n@@s; s@// no REMAP_FILE_DEDUP: use file_in.*?static int ksu_wrapper_fadvise@static int ksu_wrapper_fadvise@s; s@^    p->ops\.iopoll = .*\n@@m; s@^    p->ops\.remap_file_range = .*\n@@m'
++ local target=drivers/kernelsu/infra/file_wrapper.c
++ shift
++ '[' -f drivers/kernelsu/infra/file_wrapper.c ']'
++ echo '[patch] drivers/kernelsu/infra/file_wrapper.c'
+[patch] drivers/kernelsu/infra/file_wrapper.c
++ perl -0pi -e 's@#include <linux/mount.h>\n@#include <linux/mount.h>\n#ifndef security_inode_init_security_anon\n#define security_inode_init_security_anon(inode, qname, context_inode) ((void)(inode), (void)(qname), (void)(context_inode), 0)\n#endif\n#ifndef selinux_inode\n#define selinux_inode(inode) ((struct inode_security_struct *)((inode)->i_security))\n#endif\n@g; s@#if LINUX_VERSION_CODE >= KERNEL_VERSION\(6, 1, 0\)\nstatic int ksu_wrapper_iopoll.*?#endif\n\n@@s; s@// no REMAP_FILE_DEDUP: use file_in.*?static int ksu_wrapper_fadvise@static int ksu_wrapper_fadvise@s; s@^    p->ops\.iopoll = .*\n@@m; s@^    p->ops\.remap_file_range = .*\n@@m' drivers/kernelsu/infra/file_wrapper.c
++ patch_perl drivers/kernelsu/infra/seccomp_cache.c 's@#include <linux/seccomp.h>\n@#include <linux/seccomp.h>\n#include <asm/unistd.h>\n#ifndef SECCOMP_ARCH_NATIVE_NR\n#define SECCOMP_ARCH_NATIVE_NR __NR_syscalls\n#endif\n@g'
++ local target=drivers/kernelsu/infra/seccomp_cache.c
++ shift
++ '[' -f drivers/kernelsu/infra/seccomp_cache.c ']'
++ echo '[patch] drivers/kernelsu/infra/seccomp_cache.c'
+[patch] drivers/kernelsu/infra/seccomp_cache.c
++ perl -0pi -e 's@#include <linux/seccomp.h>\n@#include <linux/seccomp.h>\n#include <asm/unistd.h>\n#ifndef SECCOMP_ARCH_NATIVE_NR\n#define SECCOMP_ARCH_NATIVE_NR __NR_syscalls\n#endif\n@g' drivers/kernelsu/infra/seccomp_cache.c
++ patch_perl drivers/kernelsu/infra/su_mount_ns.c 's@#include <uapi/linux/mount.h>@#include <uapi/linux/fs.h>\n#include <asm/uaccess.h>@g; s@extern int path_mount\(.*?\);\n\n@@s; s@    // make root mount private\n    struct path root_path;\n    get_fs_root\(current->fs, &root_path\);\n    int pm_ret = path_mount\(NULL, &root_path, NULL, MS_PRIVATE \| MS_REC, NULL\);\n    path_put\(&root_path\);@    // make root mount private\n    mm_segment_t old_fs = get_fs();\n    set_fs(KERNEL_DS);\n    int pm_ret = ksys_mount(NULL, "/", NULL, MS_PRIVATE | MS_REC, NULL);\n    set_fs(old_fs);@s'
++ local target=drivers/kernelsu/infra/su_mount_ns.c
++ shift
++ '[' -f drivers/kernelsu/infra/su_mount_ns.c ']'
++ echo '[patch] drivers/kernelsu/infra/su_mount_ns.c'
+[patch] drivers/kernelsu/infra/su_mount_ns.c
++ perl -0pi -e 's@#include <uapi/linux/mount.h>@#include <uapi/linux/fs.h>\n#include <asm/uaccess.h>@g; s@extern int path_mount\(.*?\);\n\n@@s; s@    // make root mount private\n    struct path root_path;\n    get_fs_root\(current->fs, &root_path\);\n    int pm_ret = path_mount\(NULL, &root_path, NULL, MS_PRIVATE \| MS_REC, NULL\);\n    path_put\(&root_path\);@    // make root mount private\n    mm_segment_t old_fs = get_fs();\n    set_fs(KERNEL_DS);\n    int pm_ret = ksys_mount(NULL, "/", NULL, MS_PRIVATE | MS_REC, NULL);\n    set_fs(old_fs);@s' drivers/kernelsu/infra/su_mount_ns.c
++ patch_perl drivers/kernelsu/manager/pkg_observer.c 's@#include <linux/version.h>\n@#include <linux/version.h>\n#include <linux/string.h>\n@g; s@static const struct fsnotify_ops ksu_ops = \{\n    \.handle_inode_event = ksu_handle_inode_event,\n\};@static int ksu_handle_event(struct fsnotify_group *group, struct inode *inode, u32 mask, const void *data,\n                            int data_type, const unsigned char *file_name, u32 cookie,\n                            struct fsnotify_iter_info *iter_info)\n{\n    struct qstr qname;\n\n    (void)group;\n    (void)data;\n    (void)data_type;\n    (void)iter_info;\n\n    if (!file_name)\n        return 0;\n\n    qname.name = file_name;\n    qname.len = strlen(file_name);\n    qname.hash = 0;\n    return ksu_handle_inode_event(NULL, mask, inode, NULL, &qname, cookie);\n}\n\nstatic const struct fsnotify_ops ksu_ops = {\n    .handle_event = ksu_handle_event,\n};@g'
++ local target=drivers/kernelsu/manager/pkg_observer.c
++ shift
++ '[' -f drivers/kernelsu/manager/pkg_observer.c ']'
++ echo '[patch] drivers/kernelsu/manager/pkg_observer.c'
+[patch] drivers/kernelsu/manager/pkg_observer.c
++ perl -0pi -e 's@#include <linux/version.h>\n@#include <linux/version.h>\n#include <linux/string.h>\n@g; s@static const struct fsnotify_ops ksu_ops = \{\n    \.handle_inode_event = ksu_handle_inode_event,\n\};@static int ksu_handle_event(struct fsnotify_group *group, struct inode *inode, u32 mask, const void *data,\n                            int data_type, const unsigned char *file_name, u32 cookie,\n                            struct fsnotify_iter_info *iter_info)\n{\n    struct qstr qname;\n\n    (void)group;\n    (void)data;\n    (void)data_type;\n    (void)iter_info;\n\n    if (!file_name)\n        return 0;\n\n    qname.name = file_name;\n    qname.len = strlen(file_name);\n    qname.hash = 0;\n    return ksu_handle_inode_event(NULL, mask, inode, NULL, &qname, cookie);\n}\n\nstatic const struct fsnotify_ops ksu_ops = {\n    .handle_event = ksu_handle_event,\n};@g' drivers/kernelsu/manager/pkg_observer.c
++ patch_perl drivers/kernelsu/policy/allowlist.c 's@#include <linux/task_work.h>\n@#include <linux/task_work.h>\n#include <linux/sched/task.h>\n#ifndef TWA_RESUME\n#define TWA_RESUME 1\n#endif\n#ifndef fallthrough\n#define fallthrough do {} while (0)\n#endif\n@g'
++ local target=drivers/kernelsu/policy/allowlist.c
++ shift
++ '[' -f drivers/kernelsu/policy/allowlist.c ']'
++ echo '[patch] drivers/kernelsu/policy/allowlist.c'
+[patch] drivers/kernelsu/policy/allowlist.c
++ perl -0pi -e 's@#include <linux/task_work.h>\n@#include <linux/task_work.h>\n#include <linux/sched/task.h>\n#ifndef TWA_RESUME\n#define TWA_RESUME 1\n#endif\n#ifndef fallthrough\n#define fallthrough do {} while (0)\n#endif\n@g' drivers/kernelsu/policy/allowlist.c
++ patch_perl drivers/kernelsu/policy/app_profile.c 's@void seccomp_filter_release\(struct task_struct \*tsk\);\n@@g; s@\n    atomic_set\(&current->seccomp\.filter_count, 0\);@@g; s@seccomp_filter_release\(fake\);@put_seccomp_filter(fake);@g'
++ local target=drivers/kernelsu/policy/app_profile.c
++ shift
++ '[' -f drivers/kernelsu/policy/app_profile.c ']'
++ echo '[patch] drivers/kernelsu/policy/app_profile.c'
+[patch] drivers/kernelsu/policy/app_profile.c
++ perl -0pi -e 's@void seccomp_filter_release\(struct task_struct \*tsk\);\n@@g; s@\n    atomic_set\(&current->seccomp\.filter_count, 0\);@@g; s@seccomp_filter_release\(fake\);@put_seccomp_filter(fake);@g' drivers/kernelsu/policy/app_profile.c
++ patch_perl drivers/kernelsu/runtime/ksud_integration.c 's@#include <linux/uaccess.h>\n@#include <linux/uaccess.h>\n#ifndef strncpy_from_user_nofault\n#define strncpy_from_user_nofault strncpy_from_user\n#endif\n#ifndef copy_from_user_nofault\n#define copy_from_user_nofault copy_from_user\n#endif\n#ifndef copy_to_user_nofault\n#define copy_to_user_nofault copy_to_user\n#endif\n@g'
++ local target=drivers/kernelsu/runtime/ksud_integration.c
++ shift
++ '[' -f drivers/kernelsu/runtime/ksud_integration.c ']'
++ echo '[patch] drivers/kernelsu/runtime/ksud_integration.c'
+[patch] drivers/kernelsu/runtime/ksud_integration.c
++ perl -0pi -e 's@#include <linux/uaccess.h>\n@#include <linux/uaccess.h>\n#ifndef strncpy_from_user_nofault\n#define strncpy_from_user_nofault strncpy_from_user\n#endif\n#ifndef copy_from_user_nofault\n#define copy_from_user_nofault copy_from_user\n#endif\n#ifndef copy_to_user_nofault\n#define copy_to_user_nofault copy_to_user\n#endif\n@g' drivers/kernelsu/runtime/ksud_integration.c
++ patch_perl drivers/kernelsu/selinux/selinux.c 's@#include "objsec.h"\n@#include "objsec.h"\n#ifndef selinux_cred\n#define selinux_cred(cred) ((struct task_security_struct *)((cred)->security))\n#endif\n@g'
++ local target=drivers/kernelsu/selinux/selinux.c
++ shift
++ '[' -f drivers/kernelsu/selinux/selinux.c ']'
++ echo '[patch] drivers/kernelsu/selinux/selinux.c'
+[patch] drivers/kernelsu/selinux/selinux.c
++ perl -0pi -e 's@#include "objsec.h"\n@#include "objsec.h"\n#ifndef selinux_cred\n#define selinux_cred(cred) ((struct task_security_struct *)((cred)->security))\n#endif\n@g' drivers/kernelsu/selinux/selinux.c
++ patch_perl drivers/kernelsu/sulog/event.c 's@#include <linux/minmax.h>@#include <linux/kernel.h>@g; s@#include <linux/uaccess.h>\n@#include <linux/uaccess.h>\n#ifndef strncpy_from_user_nofault\n#define strncpy_from_user_nofault strncpy_from_user\n#endif\n@g'
++ local target=drivers/kernelsu/sulog/event.c
++ shift
++ '[' -f drivers/kernelsu/sulog/event.c ']'
++ echo '[patch] drivers/kernelsu/sulog/event.c'
+[patch] drivers/kernelsu/sulog/event.c
++ perl -0pi -e 's@#include <linux/minmax.h>@#include <linux/kernel.h>@g; s@#include <linux/uaccess.h>\n@#include <linux/uaccess.h>\n#ifndef strncpy_from_user_nofault\n#define strncpy_from_user_nofault strncpy_from_user\n#endif\n@g' drivers/kernelsu/sulog/event.c
++ patch_perl drivers/kernelsu/supercall/dispatch.c 's@#include <linux/version.h>\n@#include <linux/version.h>\n#include <linux/sched/task.h>\n#include <linux/sched/signal.h>\n#include <linux/pid.h>\n@g'
++ local target=drivers/kernelsu/supercall/dispatch.c
++ shift
++ '[' -f drivers/kernelsu/supercall/dispatch.c ']'
++ echo '[patch] drivers/kernelsu/supercall/dispatch.c'
+[patch] drivers/kernelsu/supercall/dispatch.c
++ perl -0pi -e 's@#include <linux/version.h>\n@#include <linux/version.h>\n#include <linux/sched/task.h>\n#include <linux/sched/signal.h>\n#include <linux/pid.h>\n@g' drivers/kernelsu/supercall/dispatch.c
++ patch_perl drivers/kernelsu/supercall/supercall.c 's@#include <linux/task_work.h>\n@#include <linux/task_work.h>\n#ifndef TWA_RESUME\n#define TWA_RESUME 1\n#endif\n@g'
++ local target=drivers/kernelsu/supercall/supercall.c
++ shift
++ '[' -f drivers/kernelsu/supercall/supercall.c ']'
++ echo '[patch] drivers/kernelsu/supercall/supercall.c'
+[patch] drivers/kernelsu/supercall/supercall.c
++ perl -0pi -e 's@#include <linux/task_work.h>\n@#include <linux/task_work.h>\n#ifndef TWA_RESUME\n#define TWA_RESUME 1\n#endif\n@g' drivers/kernelsu/supercall/supercall.c
++ cat
++ cat
++ cat
++ cat
+++ mktemp
++ tmp_ksu_init=/tmp/tmp.lDhCoAvzd7
++ printf '#ifndef MODULE_IMPORT_NS\n#define MODULE_IMPORT_NS(ns)\n#endif\n'
++ cat drivers/kernelsu/core/init.c
++ mv /tmp/tmp.lDhCoAvzd7 drivers/kernelsu/core/init.c
++ python3 -
++ grep -n 'skipping free_initmem' init/main.c
+1092:	pr_err("munch_kinit: skipping free_initmem before mark_readonly\n");
++ git clone https://github.com/liyafe1997/AnyKernel3 -b kona --single-branch --depth=1 anykernel
+Cloning into 'anykernel'...
++ sed -i '/device.name5=lmi/a device.name6=munch' anykernel/anykernel.sh
++ make ARCH=arm64 SUBARCH=arm64 O=out CC=/home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/proton-clang/proton-clang-20210522/bin/clang CROSS_COMPILE=/home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/proton-clang/proton-clang-20210522/bin/aarch64-linux-gnu- CROSS_COMPILE_ARM32=/home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/arm32-toolchain-wrapper/arm-linux-gnueabi- CROSS_COMPILE_COMPAT=/home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/arm32-toolchain-wrapper/arm-linux-gnueabi- CLANG_TRIPLE=aarch64-linux-gnu- vendor/munch_defconfig
+make[1]: Entering directory '/home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/kernel_workspace/android_kernel/out'
+  HOSTCC  scripts/basic/fixdep
+  GEN     ./Makefile
+  HOSTCC  scripts/kconfig/conf.o
+  YACC    scripts/kconfig/zconf.tab.c
+  LEX     scripts/kconfig/zconf.lex.c
+  HOSTCC  scripts/kconfig/zconf.tab.o
+  HOSTLD  scripts/kconfig/conf
+#
+# configuration written to .config
+#
+make[1]: Leaving directory '/home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/kernel_workspace/android_kernel/out'
++ scripts/config --file out/.config -e MODULES -e KPROBES -e KRETPROBES -e KSU -e KSU_MANUAL_SU -d KPM -e KALLSYMS -e KALLSYMS_ALL --set-str STATIC_USERMODEHELPER_PATH /system/bin/micd -e PERF_CRITICAL_RT_TASK -e SF_BINDER -e OVERLAY_FS -d DEBUG_FS -e MIGT -e MIGT_ENERGY_MODEL -e MIHW -e PACKAGE_RUNTIME_INFO -e BINDER_OPT -e KPERFEVENTS -e MILLET -e PERF_HUMANTASK -e LTO -e LTO_CLANG -e LTO_CLANG_FULL -d LOCALVERSION_AUTO -e XIAOMI_MIUI -e SERIAL_MSM_GENI_CONSOLE --set-val LITTLE_CPU_MASK 15 --set-val BIG_CPU_MASK 112 --set-val PRIME_CPU_MASK 128 -d CFI_CLANG -d SHADOW_CALL_STACK -d MI_MEMORY_SYSFS -e TASK_DELAY_ACCT -e MIUI_ZRAM_MEMORY_TRACKING -d CONFIG_MODULE_SIG_SHA512 -d CONFIG_MODULE_SIG_HASH -e MI_FRAGMENTION -e PERF_HELPER -e BOOTUP_RECLAIM -e MI_RECLAIM -e RTMM
++ make ARCH=arm64 SUBARCH=arm64 O=out CC=/home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/proton-clang/proton-clang-20210522/bin/clang CROSS_COMPILE=/home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/proton-clang/proton-clang-20210522/bin/aarch64-linux-gnu- CROSS_COMPILE_ARM32=/home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/arm32-toolchain-wrapper/arm-linux-gnueabi- CROSS_COMPILE_COMPAT=/home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/arm32-toolchain-wrapper/arm-linux-gnueabi- CLANG_TRIPLE=aarch64-linux-gnu- olddefconfig
+make[1]: Entering directory '/home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/kernel_workspace/android_kernel/out'
+  GEN     ./Makefile
+scripts/kconfig/conf  --olddefconfig Kconfig
+#
+# configuration written to .config
+#
+make[1]: Leaving directory '/home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/kernel_workspace/android_kernel/out'
++ echo '[final SukiSU config]'
+[final SukiSU config]
++ grep -E 'CONFIG_LOCALVERSION|CONFIG_MODULES|CONFIG_KPROBES|CONFIG_KRETPROBES|CONFIG_KSU|CONFIG_KPM|CONFIG_KSU_SUSFS|CONFIG_KALLSYMS|CONFIG_LITTLE_CPU_MASK|CONFIG_BIG_CPU_MASK|CONFIG_PRIME_CPU_MASK|CONFIG_SERIAL_MSM_GENI_CONSOLE|CONFIG_BUILD_ARM64|CONFIG_LTO|CONFIG_CFI_CLANG|CONFIG_SHADOW_CALL_STACK' out/.config
+CONFIG_LOCALVERSION="-FusionX-2.0.1"
+# CONFIG_LOCALVERSION_AUTO is not set
+CONFIG_KALLSYMS=y
+CONFIG_KALLSYMS_BASE_RELATIVE=y
+CONFIG_LITTLE_CPU_MASK=15
+CONFIG_BIG_CPU_MASK=112
+CONFIG_PRIME_CPU_MASK=128
+CONFIG_BUILD_ARM64_APPENDED_DTB_IMAGE=y
+CONFIG_BUILD_ARM64_APPENDED_KERNEL_IMAGE_NAME="Image.gz-dtb"
+CONFIG_BUILD_ARM64_APPENDED_DTB_IMAGE_NAMES=""
+CONFIG_BUILD_ARM64_KERNEL_COMPRESSION_GZIP=y
+# CONFIG_BUILD_ARM64_UNCOMPRESSED_KERNEL is not set
+CONFIG_BUILD_ARM64_DT_OVERLAY=y
+CONFIG_KPROBES=y
+CONFIG_KRETPROBES=y
+# CONFIG_CFI_CLANG is not set
+# CONFIG_SHADOW_CALL_STACK is not set
+CONFIG_LTO=y
+CONFIG_LTO_CLANG=y
+# CONFIG_LTO_NONE is not set
+CONFIG_LTO_CLANG_FULL=y
+# CONFIG_LTO_CLANG_THIN is not set
+CONFIG_MODULES_USE_ELF_RELA=y
+CONFIG_MODULES=y
+CONFIG_MODULES_TREE_LOOKUP=y
+CONFIG_SERIAL_MSM_GENI_CONSOLE=y
+CONFIG_KSU=y
+# CONFIG_KSU_DEBUG is not set
+CONFIG_KSU_MANUAL_SU=y
+# CONFIG_KPM is not set
+# CONFIG_KSU_DISABLE_MANAGER is not set
+# CONFIG_KSU_DISABLE_POLICY is not set
++ grep -q '^CONFIG_KSU=y' out/.config
++ grep -q '^CONFIG_KPM=y' out/.config
++ grep -q '^CONFIG_KSU_SUSFS=y' out/.config
++ grep -q '^CONFIG_SERIAL_MSM_GENI_CONSOLE=y' out/.config
++ grep -q '^CONFIG_LITTLE_CPU_MASK=15$' out/.config
++ grep -q '^CONFIG_BIG_CPU_MASK=112$' out/.config
++ grep -q '^CONFIG_PRIME_CPU_MASK=128$' out/.config
+++ nproc
++ make ARCH=arm64 SUBARCH=arm64 O=out CC=/home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/proton-clang/proton-clang-20210522/bin/clang CROSS_COMPILE=/home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/proton-clang/proton-clang-20210522/bin/aarch64-linux-gnu- CROSS_COMPILE_ARM32=/home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/arm32-toolchain-wrapper/arm-linux-gnueabi- CROSS_COMPILE_COMPAT=/home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/arm32-toolchain-wrapper/arm-linux-gnueabi- CLANG_TRIPLE=aarch64-linux-gnu- -j4 Image.gz-dtb
+make[1]: Entering directory '/home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/kernel_workspace/android_kernel/out'
+  GEN     ./Makefile
+scripts/kconfig/conf  --syncconfig Kconfig
+  UPD     include/config/kernel.release
+  GEN     ./Makefile
+  WRAP    arch/arm64/include/generated/uapi/asm/errno.h
+  WRAP    arch/arm64/include/generated/uapi/asm/ioctl.h
+  WRAP    arch/arm64/include/generated/uapi/asm/ioctls.h
+  WRAP    arch/arm64/include/generated/uapi/asm/ipcbuf.h
+  WRAP    arch/arm64/include/generated/uapi/asm/kvm_para.h
+  WRAP    arch/arm64/include/generated/uapi/asm/mman.h
+  WRAP    arch/arm64/include/generated/uapi/asm/msgbuf.h
+  WRAP    arch/arm64/include/generated/uapi/asm/poll.h
+  WRAP    arch/arm64/include/generated/uapi/asm/resource.h
+  WRAP    arch/arm64/include/generated/uapi/asm/sembuf.h
+  WRAP    arch/arm64/include/generated/uapi/asm/shmbuf.h
+  WRAP    arch/arm64/include/generated/uapi/asm/socket.h
+  WRAP    arch/arm64/include/generated/uapi/asm/sockios.h
+  WRAP    arch/arm64/include/generated/uapi/asm/swab.h
+  WRAP    arch/arm64/include/generated/uapi/asm/termbits.h
+  WRAP    arch/arm64/include/generated/uapi/asm/termios.h
+  UPD     include/generated/uapi/linux/version.h
+  WRAP    arch/arm64/include/generated/uapi/asm/types.h
+  UPD     include/generated/utsrelease.h
+  Using .. as source for kernel
+  WRAP    arch/arm64/include/generated/asm/bugs.h
+  WRAP    arch/arm64/include/generated/asm/delay.h
+  WRAP    arch/arm64/include/generated/asm/div64.h
+  WRAP    arch/arm64/include/generated/asm/dma.h
+  WRAP    arch/arm64/include/generated/asm/dma-contiguous.h
+  WRAP    arch/arm64/include/generated/asm/early_ioremap.h
+  WRAP    arch/arm64/include/generated/asm/emergency-restart.h
+  WRAP    arch/arm64/include/generated/asm/hw_irq.h
+  WRAP    arch/arm64/include/generated/asm/irq_regs.h
+  WRAP    arch/arm64/include/generated/asm/kdebug.h
+  WRAP    arch/arm64/include/generated/asm/kmap_types.h
+  WRAP    arch/arm64/include/generated/asm/local.h
+  WRAP    arch/arm64/include/generated/asm/local64.h
+  WRAP    arch/arm64/include/generated/asm/mcs_spinlock.h
+  WRAP    arch/arm64/include/generated/asm/mm-arch-hooks.h
+  WRAP    arch/arm64/include/generated/asm/msi.h
+  WRAP    arch/arm64/include/generated/asm/preempt.h
+  WRAP    arch/arm64/include/generated/asm/qrwlock.h
+  WRAP    arch/arm64/include/generated/asm/qspinlock.h
+  WRAP    arch/arm64/include/generated/asm/segment.h
+  WRAP    arch/arm64/include/generated/asm/serial.h
+  WRAP    arch/arm64/include/generated/asm/set_memory.h
+  WRAP    arch/arm64/include/generated/asm/sizes.h
+  WRAP    arch/arm64/include/generated/asm/switch_to.h
+  WRAP    arch/arm64/include/generated/asm/trace_clock.h
+  WRAP    arch/arm64/include/generated/asm/unaligned.h
+  WRAP    arch/arm64/include/generated/asm/user.h
+  WRAP    arch/arm64/include/generated/asm/vga.h
+  LDS     scripts/module-lto.lds
+  HOSTCC  scripts/dtc/dtc.o
+  CC      scripts/mod/empty.o
+  HOSTCC  scripts/selinux/genheaders/genheaders
+  HOSTCC  scripts/selinux/mdp/mdp
+  HOSTCC  scripts/mod/mk_elfconfig
+  CC      scripts/mod/devicetable-offsets.s
+  MKELF   scripts/mod/elfconfig.h
+  HOSTCC  scripts/mod/modpost.o
+  HOSTCC  scripts/dtc/flattree.o
+  HOSTCC  scripts/mod/sumversion.o
+  HOSTCC  scripts/bin2c
+  HOSTCC  scripts/kallsyms
+  HOSTCC  scripts/sortextable
+  HOSTCC  scripts/dtc/fstree.o
+  UPD     scripts/mod/devicetable-offsets.h
+  HOSTCC  scripts/dtc/data.o
+  HOSTCC  scripts/mod/file2alias.o
+  HOSTCC  scripts/dtc/livetree.o
+  HOSTCC  scripts/asn1_compiler
+  HOSTCC  scripts/extract-cert
+  HOSTCC  scripts/dtc/treesource.o
+  HOSTCC  scripts/dtc/srcpos.o
+  HOSTCC  scripts/dtc/checks.o
+  HOSTLD  scripts/mod/modpost
+  HOSTCC  scripts/dtc/util.o
+  LEX     scripts/dtc/dtc-lexer.lex.c
+  YACC    scripts/dtc/dtc-parser.tab.h
+  YACC    scripts/dtc/dtc-parser.tab.c
+  HOSTCC  scripts/dtc/yamltree.o
+  HOSTCC  scripts/dtc/dtc-lexer.lex.o
+  HOSTCC  scripts/dtc/dtc-parser.tab.o
+  HOSTLD  scripts/dtc/dtc
+  CC      kernel/bounds.s
+  UPD     include/generated/timeconst.h
+  UPD     include/generated/bounds.h
+  CC      arch/arm64/kernel/asm-offsets.s
+  UPD     include/generated/asm-offsets.h
+  CALL    ../scripts/checksyscalls.sh
+  LDS     arch/arm64/kernel/vdso/vdso.lds
+  CC      arch/arm64/kernel/vdso/vgettimeofday.o
+  AS      arch/arm64/kernel/vdso/note.o
+  AS      arch/arm64/kernel/vdso/sigreturn.o
+  LD      arch/arm64/kernel/vdso/vdso.so.dbg
+/home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/proton-clang/proton-clang-20210522/bin/aarch64-linux-gnu-ld: unrecognised emulation mode: llvm
+Supported emulations: aarch64linux aarch64elf aarch64elf32 aarch64elf32b aarch64elfb armelf armelfb aarch64linuxb aarch64linux32 aarch64linux32b armelfb_linux_eabi armelf_linux_eabi
+make[2]: *** [../arch/arm64/kernel/vdso/Makefile:69: arch/arm64/kernel/vdso/vdso.so.dbg] Error 1
+make[1]: *** [arch/arm64/Makefile:239: vdso_prepare] Error 2
+make[1]: Leaving directory '/home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/kernel_workspace/android_kernel/out'
+make: *** [Makefile:153: sub-make] Error 2
