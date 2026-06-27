@@ -155,6 +155,56 @@ jobs:
           PY
           grep -n "ksu_handle_sys_reboot" kernel/reboot.c
 
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("kernel/sys.c")
+          text = path.read_text()
+          anchor = "SYSCALL_DEFINE3(setresuid, uid_t, ruid, uid_t, euid, uid_t, suid)\n"
+          if anchor not in text:
+              raise SystemExit("setresuid syscall anchor not found")
+          extern = (
+              "#ifdef CONFIG_KSU\n"
+              "extern int ksu_handle_setresuid(uid_t old_uid, uid_t new_uid);\n"
+              "#endif\n"
+              "\n"
+          )
+          if "ksu_handle_setresuid(uid_t old_uid" not in text:
+              text = text.replace(anchor, extern + anchor, 1)
+          start = text.index(anchor)
+          next_syscall = text.find("\nSYSCALL_DEFINE", start + len(anchor))
+          if next_syscall == -1:
+              raise SystemExit("next syscall after setresuid not found")
+          block = text[start:next_syscall]
+          if "ksu_old_uid" not in block:
+              block = block.replace(
+                  "{\n",
+                  "{\n"
+                  "#ifdef CONFIG_KSU\n"
+                  "\tuid_t ksu_old_uid = current_uid().val;\n"
+                  "#endif\n",
+                  1,
+              )
+          old_return = "\treturn commit_creds(new);\n"
+          new_return = (
+              "#ifdef CONFIG_KSU\n"
+              "\tretval = commit_creds(new);\n"
+              "\tif (!retval)\n"
+              "\t\tksu_handle_setresuid(ksu_old_uid, current_uid().val);\n"
+              "\treturn retval;\n"
+              "#else\n"
+              "\treturn commit_creds(new);\n"
+              "#endif\n"
+          )
+          if new_return not in block:
+              if old_return not in block:
+                  raise SystemExit("setresuid commit_creds return not found")
+              block = block.replace(old_return, new_return, 1)
+          text = text[:start] + block + text[next_syscall:]
+          path.write_text(text)
+          PY
+          grep -n "ksu_handle_setresuid" kernel/sys.c
+
           # Compatibility shims for official SukiSU Ultra v4.1.3 on Xiaomi 4.19 trees.
           find -L drivers/kernelsu -name "*.c" -type f -exec sed -i "s/access_ok(/access_ok(VERIFY_READ, /g" {} +
           patch_perl drivers/kernelsu/feature/sucompat.c 's@#include <linux/pgtable.h>@#include <asm/pgtable.h>@g; s@#include <linux/uaccess.h>\n@#include <linux/uaccess.h>\n#ifndef strncpy_from_user_nofault\n#define strncpy_from_user_nofault strncpy_from_user\n#endif\n@g'
