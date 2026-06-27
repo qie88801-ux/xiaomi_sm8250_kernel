@@ -1,0 +1,172 @@
++ mkdir -p /home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/kernel_workspace
++ cd /home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/kernel_workspace
++ git clone https://github.com/SenseiiX/fusionX_sm8250 -b stable-next --depth=1 --recurse-submodules --shallow-submodules android_kernel
+Cloning into 'android_kernel'...
+Updating files:  22% (16132/73011)Updating files:  23% (16793/73011)Updating files:  24% (17523/73011)Updating files:  25% (18253/73011)Updating files:  26% (18983/73011)Updating files:  27% (19713/73011)Updating files:  28% (20444/73011)Updating files:  29% (21174/73011)Updating files:  30% (21904/73011)Updating files:  31% (22634/73011)Updating files:  32% (23364/73011)Updating files:  33% (24094/73011)Updating files:  34% (24824/73011)Updating files:  35% (25554/73011)Updating files:  36% (26284/73011)Updating files:  37% (27015/73011)Updating files:  37% (27386/73011)Updating files:  38% (27745/73011)Updating files:  39% (28475/73011)Updating files:  40% (29205/73011)Updating files:  41% (29935/73011)Updating files:  42% (30665/73011)Updating files:  43% (31395/73011)Updating files:  44% (32125/73011)Updating files:  45% (32855/73011)Updating files:  46% (33586/73011)Updating files:  47% (34316/73011)Updating files:  48% (35046/73011)Updating files:  49% (35776/73011)Updating files:  50% (36506/73011)Updating files:  51% (37236/73011)Updating files:  52% (37966/73011)Updating files:  52% (38068/73011)Updating files:  53% (38696/73011)Updating files:  54% (39426/73011)Updating files:  55% (40157/73011)Updating files:  56% (40887/73011)Updating files:  57% (41617/73011)Updating files:  58% (42347/73011)Updating files:  59% (43077/73011)Updating files:  60% (43807/73011)Updating files:  61% (44537/73011)Updating files:  62% (45267/73011)Updating files:  63% (45997/73011)Updating files:  63% (46500/73011)Updating files:  64% (46728/73011)Updating files:  65% (47458/73011)Updating files:  66% (48188/73011)Updating files:  67% (48918/73011)Updating files:  68% (49648/73011)Updating files:  69% (50378/73011)Updating files:  70% (51108/73011)Updating files:  71% (51838/73011)Updating files:  72% (52568/73011)Updating files:  73% (53299/73011)Updating files:  74% (54029/73011)Updating files:  75% (54759/73011)Updating files:  75% (55348/73011)Updating files:  76% (55489/73011)Updating files:  77% (56219/73011)Updating files:  78% (56949/73011)Updating files:  79% (57679/73011)Updating files:  80% (58409/73011)Updating files:  81% (59139/73011)Updating files:  82% (59870/73011)Updating files:  83% (60600/73011)Updating files:  84% (61330/73011)Updating files:  85% (62060/73011)Updating files:  86% (62790/73011)Updating files:  87% (63520/73011)Updating files:  88% (64250/73011)Updating files:  89% (64980/73011)Updating files:  90% (65710/73011)Updating files:  91% (66441/73011)Updating files:  91% (67115/73011)Updating files:  92% (67171/73011)Updating files:  93% (67901/73011)Updating files:  94% (68631/73011)Updating files:  95% (69361/73011)Updating files:  96% (70091/73011)Updating files:  97% (70821/73011)Updating files:  98% (71551/73011)Updating files:  99% (72281/73011)Updating files: 100% (73011/73011)Updating files: 100% (73011/73011), done.
+Submodule 'KernelSU' (https://github.com/rifsxd/KernelSU-Next) registered for path 'KernelSU-Next'
+Cloning into '/home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/kernel_workspace/android_kernel/KernelSU-Next'...
+From https://github.com/rifsxd/KernelSU-Next
+ * branch            fb7a01b2ad97cbe80cbcb39fa435e1133beadaae -> FETCH_HEAD
+Submodule path 'KernelSU-Next': checked out 'fb7a01b2ad97cbe80cbcb39fa435e1133beadaae'
++ cd android_kernel
++ git submodule update --init --recursive --depth=1
++ echo '[Remove unsupported LLVM optimization flags for Proton clang 13]'
+[Remove unsupported LLVM optimization flags for Proton clang 13]
++ sed -i -E '/regalloc-enable-advisor|enable-ml-inliner|fsplit-machine-functions/d' Makefile
++ TOOLCHAIN=/home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/proton-clang/proton-clang-20210522/bin
++ ARM32_WRAP=/home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/arm32-toolchain-wrapper
++ mkdir -p /home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/arm32-toolchain-wrapper
++ for tool in as ld objcopy elfedit gcc
++ ln -sf /usr/bin/arm-linux-gnueabi-as /home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/arm32-toolchain-wrapper/arm-linux-gnueabi-as
++ for tool in as ld objcopy elfedit gcc
++ ln -sf /usr/bin/arm-linux-gnueabi-ld /home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/arm32-toolchain-wrapper/arm-linux-gnueabi-ld
++ for tool in as ld objcopy elfedit gcc
++ ln -sf /usr/bin/arm-linux-gnueabi-objcopy /home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/arm32-toolchain-wrapper/arm-linux-gnueabi-objcopy
++ for tool in as ld objcopy elfedit gcc
++ ln -sf /usr/bin/arm-linux-gnueabi-elfedit /home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/arm32-toolchain-wrapper/arm-linux-gnueabi-elfedit
++ for tool in as ld objcopy elfedit gcc
++ ln -sf /usr/bin/arm-linux-gnueabi-gcc /home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/arm32-toolchain-wrapper/arm-linux-gnueabi-gcc
++ export PATH=/usr/lib/ccache:/usr/bin:/home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/proton-clang/proton-clang-20210522/bin:/snap/bin:/home/runner/.local/bin:/opt/pipx_bin:/home/runner/.cargo/bin:/home/runner/.config/composer/vendor/bin:/usr/local/.ghcup/bin:/home/runner/.dotnet/tools:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin
++ PATH=/usr/lib/ccache:/usr/bin:/home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/proton-clang/proton-clang-20210522/bin:/snap/bin:/home/runner/.local/bin:/opt/pipx_bin:/home/runner/.cargo/bin:/home/runner/.config/composer/vendor/bin:/usr/local/.ghcup/bin:/home/runner/.dotnet/tools:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin
++ export ARCH=arm64
++ ARCH=arm64
++ export SUBARCH=arm64
++ SUBARCH=arm64
++ export CCACHE_DIR=/home/runner/.cache/ccache_munch_sukisu_v413
++ CCACHE_DIR=/home/runner/.cache/ccache_munch_sukisu_v413
++ for tool in ld.lld llvm-ar llvm-nm llvm-objcopy llvm-objdump llvm-readelf llvm-strip
++ test -x /home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/proton-clang/proton-clang-20210522/bin/ld.lld
++ for tool in ld.lld llvm-ar llvm-nm llvm-objcopy llvm-objdump llvm-readelf llvm-strip
++ test -x /home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/proton-clang/proton-clang-20210522/bin/llvm-ar
++ for tool in ld.lld llvm-ar llvm-nm llvm-objcopy llvm-objdump llvm-readelf llvm-strip
++ test -x /home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/proton-clang/proton-clang-20210522/bin/llvm-nm
++ for tool in ld.lld llvm-ar llvm-nm llvm-objcopy llvm-objdump llvm-readelf llvm-strip
++ test -x /home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/proton-clang/proton-clang-20210522/bin/llvm-objcopy
++ for tool in ld.lld llvm-ar llvm-nm llvm-objcopy llvm-objdump llvm-readelf llvm-strip
++ test -x /home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/proton-clang/proton-clang-20210522/bin/llvm-objdump
++ for tool in ld.lld llvm-ar llvm-nm llvm-objcopy llvm-objdump llvm-readelf llvm-strip
++ test -x /home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/proton-clang/proton-clang-20210522/bin/llvm-readelf
++ for tool in ld.lld llvm-ar llvm-nm llvm-objcopy llvm-objdump llvm-readelf llvm-strip
++ test -x /home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/proton-clang/proton-clang-20210522/bin/llvm-strip
++ MAKE_ARGS='ARCH=arm64 SUBARCH=arm64 O=out CC=/home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/proton-clang/proton-clang-20210522/bin/clang LD=/home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/proton-clang/proton-clang-20210522/bin/ld.lld AR=/home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/proton-clang/proton-clang-20210522/bin/llvm-ar NM=/home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/proton-clang/proton-clang-20210522/bin/llvm-nm OBJCOPY=/home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/proton-clang/proton-clang-20210522/bin/llvm-objcopy OBJDUMP=/home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/proton-clang/proton-clang-20210522/bin/llvm-objdump READELF=/home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/proton-clang/proton-clang-20210522/bin/llvm-readelf STRIP=/home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/proton-clang/proton-clang-20210522/bin/llvm-strip CROSS_COMPILE=/home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/proton-clang/proton-clang-20210522/bin/aarch64-linux-gnu- CROSS_COMPILE_ARM32=/home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/arm32-toolchain-wrapper/arm-linux-gnueabi- CROSS_COMPILE_COMPAT=/home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/arm32-toolchain-wrapper/arm-linux-gnueabi- CLANG_TRIPLE=aarch64-linux-gnu- KSU_MANAGER_PACKAGE=com.sukisu.ultra'
++ echo '[kernel source]'
+[kernel source]
++ git rev-parse HEAD
+d69c7ed3e9baaf7447327226d9e0b43e66ce14e4
++ grep -E '^(VERSION|PATCHLEVEL|SUBLEVEL|EXTRAVERSION) =' Makefile
+VERSION = 4
+PATCHLEVEL = 19
+SUBLEVEL = 337
+EXTRAVERSION =
++ echo '[clang]'
+[clang]
++ /home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/proton-clang/proton-clang-20210522/bin/clang --version
+Proton clang version 13.0.0 (https://github.com/llvm/llvm-project b4fd512c36ca344a3ff69350219e8b0a67e9472a)
+Target: x86_64-unknown-linux-gnu
+Thread model: posix
+InstalledDir: /home/runner/work/xiaomi_sm8250_kernel/xiaomi_sm8250_kernel/proton-clang/proton-clang-20210522/bin
++ rm -f drivers/kernelsu
++ git clone https://github.com/SukiSU-Ultra/SukiSU-Ultra.git -b v4.1.3 --depth=1 KernelSU
+Cloning into 'KernelSU'...
+Note: switching to '0ca744a88835144c58d8256ebb32c279edabfcde'.
+
+You are in 'detached HEAD' state. You can look around, make experimental
+changes and commit them, and you can discard any commits you make in this
+state without impacting any branches by switching back to a branch.
+
+If you want to create a new branch to retain commits you create, you may
+do so (now or later) by using -c with the switch command. Example:
+
+  git switch -c <new-branch-name>
+
+Or undo this operation with:
+
+  git switch -
+
+Turn off this advice by setting config variable advice.detachedHead to false
+
++ ln -s ../KernelSU/kernel drivers/kernelsu
+++ git -C KernelSU rev-parse HEAD
++ test 0ca744a88835144c58d8256ebb32c279edabfcde = 0ca744a88835144c58d8256ebb32c279edabfcde
++ git -C KernelSU describe --tags --always
+v4.1.3
++ test -f drivers/kernelsu/Kconfig
++ test -f drivers/kernelsu/Kbuild
++ patch_perl drivers/kernelsu/Kconfig 's@depends on KPROBES && EXT4_FS@depends on EXT4_FS@g'
++ local target=drivers/kernelsu/Kconfig
++ shift
++ '[' -f drivers/kernelsu/Kconfig ']'
++ echo '[patch] drivers/kernelsu/Kconfig'
+[patch] drivers/kernelsu/Kconfig
++ perl -0pi -e 's@depends on KPROBES && EXT4_FS@depends on EXT4_FS@g' drivers/kernelsu/Kconfig
++ grep -q 'source "drivers/kernelsu/Kconfig"' drivers/Kconfig
++ grep -q 'obj-y[[:space:]]*+=[[:space:]]*kernelsu/' drivers/Makefile
++ sed -i 's@obj-y[[:space:]]*+=[[:space:]]*kernelsu/@obj-$(CONFIG_KSU) += kernelsu/@' drivers/Makefile
++ grep -q 'obj-$(CONFIG_KSU)[[:space:]]*+=[[:space:]]*kernelsu/' drivers/Makefile
++ echo '[SukiSU integration]'
+[SukiSU integration]
++ grep -n kernelsu drivers/Kconfig drivers/Makefile
+drivers/Kconfig:240:source "drivers/kernelsu/Kconfig"
+drivers/Makefile:197:obj-$(CONFIG_KSU) += kernelsu/
++ for legacy_hook_file in fs/read_write.c fs/exec.c fs/open.c fs/stat.c drivers/input/input.c drivers/tty/pty.c kernel/reboot.c
++ patch_perl fs/read_write.c 's@#if defined\(CONFIG_KSU\) && !defined\(CONFIG_KSU_KPROBES_HOOK\)@#if 0 /* disabled legacy KernelSU hook for official SukiSU */@g; s@#ifdef CONFIG_KSU@#if 0 /* disabled legacy KernelSU hook for official SukiSU */@g'
++ local target=fs/read_write.c
++ shift
++ '[' -f fs/read_write.c ']'
++ echo '[patch] fs/read_write.c'
+[patch] fs/read_write.c
++ perl -0pi -e 's@#if defined\(CONFIG_KSU\) && !defined\(CONFIG_KSU_KPROBES_HOOK\)@#if 0 /* disabled legacy KernelSU hook for official SukiSU */@g; s@#ifdef CONFIG_KSU@#if 0 /* disabled legacy KernelSU hook for official SukiSU */@g' fs/read_write.c
++ for legacy_hook_file in fs/read_write.c fs/exec.c fs/open.c fs/stat.c drivers/input/input.c drivers/tty/pty.c kernel/reboot.c
++ patch_perl fs/exec.c 's@#if defined\(CONFIG_KSU\) && !defined\(CONFIG_KSU_KPROBES_HOOK\)@#if 0 /* disabled legacy KernelSU hook for official SukiSU */@g; s@#ifdef CONFIG_KSU@#if 0 /* disabled legacy KernelSU hook for official SukiSU */@g'
++ local target=fs/exec.c
++ shift
++ '[' -f fs/exec.c ']'
++ echo '[patch] fs/exec.c'
+[patch] fs/exec.c
++ perl -0pi -e 's@#if defined\(CONFIG_KSU\) && !defined\(CONFIG_KSU_KPROBES_HOOK\)@#if 0 /* disabled legacy KernelSU hook for official SukiSU */@g; s@#ifdef CONFIG_KSU@#if 0 /* disabled legacy KernelSU hook for official SukiSU */@g' fs/exec.c
++ for legacy_hook_file in fs/read_write.c fs/exec.c fs/open.c fs/stat.c drivers/input/input.c drivers/tty/pty.c kernel/reboot.c
++ patch_perl fs/open.c 's@#if defined\(CONFIG_KSU\) && !defined\(CONFIG_KSU_KPROBES_HOOK\)@#if 0 /* disabled legacy KernelSU hook for official SukiSU */@g; s@#ifdef CONFIG_KSU@#if 0 /* disabled legacy KernelSU hook for official SukiSU */@g'
++ local target=fs/open.c
++ shift
++ '[' -f fs/open.c ']'
++ echo '[patch] fs/open.c'
+[patch] fs/open.c
++ perl -0pi -e 's@#if defined\(CONFIG_KSU\) && !defined\(CONFIG_KSU_KPROBES_HOOK\)@#if 0 /* disabled legacy KernelSU hook for official SukiSU */@g; s@#ifdef CONFIG_KSU@#if 0 /* disabled legacy KernelSU hook for official SukiSU */@g' fs/open.c
++ for legacy_hook_file in fs/read_write.c fs/exec.c fs/open.c fs/stat.c drivers/input/input.c drivers/tty/pty.c kernel/reboot.c
++ patch_perl fs/stat.c 's@#if defined\(CONFIG_KSU\) && !defined\(CONFIG_KSU_KPROBES_HOOK\)@#if 0 /* disabled legacy KernelSU hook for official SukiSU */@g; s@#ifdef CONFIG_KSU@#if 0 /* disabled legacy KernelSU hook for official SukiSU */@g'
++ local target=fs/stat.c
++ shift
++ '[' -f fs/stat.c ']'
++ echo '[patch] fs/stat.c'
+[patch] fs/stat.c
++ perl -0pi -e 's@#if defined\(CONFIG_KSU\) && !defined\(CONFIG_KSU_KPROBES_HOOK\)@#if 0 /* disabled legacy KernelSU hook for official SukiSU */@g; s@#ifdef CONFIG_KSU@#if 0 /* disabled legacy KernelSU hook for official SukiSU */@g' fs/stat.c
++ for legacy_hook_file in fs/read_write.c fs/exec.c fs/open.c fs/stat.c drivers/input/input.c drivers/tty/pty.c kernel/reboot.c
++ patch_perl drivers/input/input.c 's@#if defined\(CONFIG_KSU\) && !defined\(CONFIG_KSU_KPROBES_HOOK\)@#if 0 /* disabled legacy KernelSU hook for official SukiSU */@g; s@#ifdef CONFIG_KSU@#if 0 /* disabled legacy KernelSU hook for official SukiSU */@g'
++ local target=drivers/input/input.c
++ shift
++ '[' -f drivers/input/input.c ']'
++ echo '[patch] drivers/input/input.c'
+[patch] drivers/input/input.c
++ perl -0pi -e 's@#if defined\(CONFIG_KSU\) && !defined\(CONFIG_KSU_KPROBES_HOOK\)@#if 0 /* disabled legacy KernelSU hook for official SukiSU */@g; s@#ifdef CONFIG_KSU@#if 0 /* disabled legacy KernelSU hook for official SukiSU */@g' drivers/input/input.c
++ for legacy_hook_file in fs/read_write.c fs/exec.c fs/open.c fs/stat.c drivers/input/input.c drivers/tty/pty.c kernel/reboot.c
++ patch_perl drivers/tty/pty.c 's@#if defined\(CONFIG_KSU\) && !defined\(CONFIG_KSU_KPROBES_HOOK\)@#if 0 /* disabled legacy KernelSU hook for official SukiSU */@g; s@#ifdef CONFIG_KSU@#if 0 /* disabled legacy KernelSU hook for official SukiSU */@g'
++ local target=drivers/tty/pty.c
++ shift
++ '[' -f drivers/tty/pty.c ']'
++ echo '[patch] drivers/tty/pty.c'
+[patch] drivers/tty/pty.c
++ perl -0pi -e 's@#if defined\(CONFIG_KSU\) && !defined\(CONFIG_KSU_KPROBES_HOOK\)@#if 0 /* disabled legacy KernelSU hook for official SukiSU */@g; s@#ifdef CONFIG_KSU@#if 0 /* disabled legacy KernelSU hook for official SukiSU */@g' drivers/tty/pty.c
++ for legacy_hook_file in fs/read_write.c fs/exec.c fs/open.c fs/stat.c drivers/input/input.c drivers/tty/pty.c kernel/reboot.c
++ patch_perl kernel/reboot.c 's@#if defined\(CONFIG_KSU\) && !defined\(CONFIG_KSU_KPROBES_HOOK\)@#if 0 /* disabled legacy KernelSU hook for official SukiSU */@g; s@#ifdef CONFIG_KSU@#if 0 /* disabled legacy KernelSU hook for official SukiSU */@g'
++ local target=kernel/reboot.c
++ shift
++ '[' -f kernel/reboot.c ']'
++ echo '[patch] kernel/reboot.c'
+[patch] kernel/reboot.c
++ perl -0pi -e 's@#if defined\(CONFIG_KSU\) && !defined\(CONFIG_KSU_KPROBES_HOOK\)@#if 0 /* disabled legacy KernelSU hook for official SukiSU */@g; s@#ifdef CONFIG_KSU@#if 0 /* disabled legacy KernelSU hook for official SukiSU */@g' kernel/reboot.c
++ python3 -
++ grep -n ksu_handle_sys_reboot kernel/reboot.c
+309:extern int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd,
+320:	ksu_handle_sys_reboot(magic1, magic2, cmd, &arg);
++ python3 -
+setresuid commit_creds return not found
