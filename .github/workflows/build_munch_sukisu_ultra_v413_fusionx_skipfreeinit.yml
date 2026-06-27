@@ -125,28 +125,30 @@ jobs:
 
           path = Path("kernel/reboot.c")
           text = path.read_text()
-          old = """SYSCALL_DEFINE4(reboot, int, magic1, int, magic2, unsigned int, cmd,
-\t\tvoid __user *, arg)
-{
-\tstruct pid_namespace *pid_ns = task_active_pid_ns(current);
-\tchar buffer[256];
-\tint ret = 0;
-"""
-          new = """#ifdef CONFIG_KSU
-extern int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd,
-\t\t\t\t\t void __user **arg);
-#endif
-
-SYSCALL_DEFINE4(reboot, int, magic1, int, magic2, unsigned int, cmd,
-\t\tvoid __user *, arg)
-{
-\tstruct pid_namespace *pid_ns = task_active_pid_ns(current);
-\tchar buffer[256];
-\tint ret = 0;
-#ifdef CONFIG_KSU
-\tksu_handle_sys_reboot(magic1, magic2, cmd, &arg);
-#endif
-"""
+          old = (
+              "SYSCALL_DEFINE4(reboot, int, magic1, int, magic2, unsigned int, cmd,\n"
+              "\t\tvoid __user *, arg)\n"
+              "{\n"
+              "\tstruct pid_namespace *pid_ns = task_active_pid_ns(current);\n"
+              "\tchar buffer[256];\n"
+              "\tint ret = 0;\n"
+          )
+          new = (
+              "#ifdef CONFIG_KSU\n"
+              "extern int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd,\n"
+              "\t\t\t\t\t void __user **arg);\n"
+              "#endif\n"
+              "\n"
+              "SYSCALL_DEFINE4(reboot, int, magic1, int, magic2, unsigned int, cmd,\n"
+              "\t\tvoid __user *, arg)\n"
+              "{\n"
+              "\tstruct pid_namespace *pid_ns = task_active_pid_ns(current);\n"
+              "\tchar buffer[256];\n"
+              "\tint ret = 0;\n"
+              "#ifdef CONFIG_KSU\n"
+              "\tksu_handle_sys_reboot(magic1, magic2, cmd, &arg);\n"
+              "#endif\n"
+          )
           if old not in text:
               raise SystemExit("reboot hook anchor not found")
           path.write_text(text.replace(old, new, 1))
