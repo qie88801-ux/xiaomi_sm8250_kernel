@@ -625,7 +625,7 @@ jobs:
             -d KRETPROBES \
             -e KSU \
             -e KSU_MANUAL_SU \
-            -e KPM \
+            -d KPM \
             -e KALLSYMS \
             -e KALLSYMS_ALL \
             --set-str STATIC_USERMODEHELPER_PATH /system/bin/micd \
@@ -669,9 +669,8 @@ jobs:
           echo "[final SukiSU config]"
           grep -E 'CONFIG_LOCALVERSION|CONFIG_MODULES|CONFIG_KPROBES|CONFIG_KRETPROBES|CONFIG_KSU|CONFIG_KPM|CONFIG_KSU_SUSFS|CONFIG_KALLSYMS|CONFIG_LITTLE_CPU_MASK|CONFIG_BIG_CPU_MASK|CONFIG_PRIME_CPU_MASK|CONFIG_SERIAL_MSM_GENI_CONSOLE|CONFIG_BUILD_ARM64|CONFIG_LTO|CONFIG_CFI_CLANG|CONFIG_SHADOW_CALL_STACK' out/.config || true
           grep -q '^CONFIG_KSU=y' out/.config
-          grep -q '^CONFIG_KPM=y' out/.config
+          ! grep -q '^CONFIG_KPM=y' out/.config
           ! grep -q '^CONFIG_KSU_SUSFS=y' out/.config
-          grep -q '^CONFIG_KALLSYMS_ALL=y' out/.config
           grep -q '^CONFIG_SERIAL_MSM_GENI_CONSOLE=y' out/.config
           grep -q '^# CONFIG_MODULES is not set' out/.config
           ! grep -q '^CONFIG_KPROBES=y' out/.config
@@ -695,7 +694,7 @@ jobs:
 
           (
             cd anykernel
-            ZIP_FILENAME="Kernel_MIUI_${DEVICE}_FusionX-skipfreeinit-manualhook-kpm_SukiSU-Ultra-v4.1.3_$(date +'%Y%m%d_%H%M%S')_anykernel3_$(git rev-parse --short=8 HEAD).zip"
+            ZIP_FILENAME="Kernel_MIUI_${DEVICE}_FusionX-skipfreeinit-manualhook_SukiSU-Ultra-v4.1.3_$(date +'%Y%m%d_%H%M%S')_anykernel3_$(git rev-parse --short=8 HEAD).zip"
             zip -r9 "$ZIP_FILENAME" ./* -x .git .gitignore out/ ./*.zip
             mv "$ZIP_FILENAME" "$GITHUB_WORKSPACE/sukisu-output/"
           )
